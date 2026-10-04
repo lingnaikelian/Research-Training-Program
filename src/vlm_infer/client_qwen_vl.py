@@ -21,17 +21,18 @@ load_dotenv(ROOT / ".env")
 
 class QwenVLClient:
     def __init__(self):
-        self.api_key = os.getenv("QIANFAN_API_KEY")
+        self.api_key = os.getenv("QIANFAN_API_KEY") or "EMPTY"
+        self.base_url = os.getenv("QIANFAN_BASE_URL")
         self.vl_endpoint = os.getenv("QIANFAN_VL_ENDPOINT")
         self.llm_endpoint = os.getenv("QIANFAN_LLM_ENDPOINT")
 
-        if not self.api_key:
-            raise RuntimeError("未设置 QIANFAN_API_KEY，请检查 .env 文件")
+        if not self.base_url:
+            raise RuntimeError("未设置 QIANFAN_BASE_URL，请检查 .env 文件")
 
-        # 千帆 v2 API 兼容 OpenAI SDK
+        # 校内私有化部署的千帆，兼容 OpenAI SDK 协议
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url="https://qianfan.baidubce.com/v2",
+            base_url=self.base_url,
         )
 
     @staticmethod
@@ -74,6 +75,7 @@ class QwenVLClient:
                 ],
             }],
             temperature=0.1,  # 行为识别要稳定，调低温度
+            max_tokens=2000,  # Thinking 模型思考过程占 token，必须给够
         )
         text = resp.choices[0].message.content.strip()
 
