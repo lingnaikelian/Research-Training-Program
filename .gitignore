@@ -32,3 +32,7 @@ results/events/
 
 # ===== 临时 =====
 .tmp_*
+
+# YOLO 权重（自动下载）
+yolov8n.pt
+*.pt
