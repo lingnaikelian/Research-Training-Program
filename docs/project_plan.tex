@@ -1,0 +1,300 @@
+\documentclass[12pt,a4paper]{ctexart}
+
+% ===== 页面与排版 =====
+\usepackage{geometry}
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+\linespread{1.3}
+
+% ===== 表格与列表 =====
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=2em}
+
+% ===== 代码块 =====
+\usepackage{listings}
+\usepackage{xcolor}
+\definecolor{codebg}{RGB}{245,245,245}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{gray!30},
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=2,
+  language=Python,
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black}
+}
+
+% ===== 超链接 =====
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+% ===== 标题 =====
+\title{视觉大模型在智慧校园行为智能分析中的应用研究\\[4pt]
+\large 十日实施计划}
+\author{中国石油大学（北京）\,计算机科学与技术\,2023 级}
+\date{2026 年 10 月}
+
+\begin{document}
+\maketitle
+
+% ============================================================
+\section{项目定位}
+
+本项目聚焦\textbf{教室 / 图书馆场景下的学生行为智能分析}，使用百度千帆平台上的
+\textbf{Qwen3-VL-32B-Thinking} 视觉大模型，以\textbf{自然语言描述行为规则}的方式实现零样本行为识别，
+并与传统 YOLO + 规则方法做对比。
+
+\textbf{目标识别的 5 类行为：}
+\begin{enumerate}
+  \item 长时间趴桌睡觉（$>$30\,s）
+  \item 持续看手机（$>$30\,s）
+  \item 频繁左右回头张望
+  \item 两人及以上持续交谈
+  \item 离座长时间未归
+\end{enumerate}
+
+\textbf{核心创新点（一句话讲清楚）：}
+传统行为识别需要为每种行为单独标注数据并训练模型；本项目用视觉大模型，
+只需用自然语言描述新行为规则即可识别，\textbf{换一种行为不用重训模型}。
+
+% ============================================================
+\section{技术路线与模型选型}
+
+\renewcommand{\arraystretch}{1.3}
+\begin{table}[h]
+\centering
+\begin{tabular}{>{\bfseries}p{4.5cm} p{8.5cm}}
+\toprule
+千帆平台模型 & 在本项目中的角色 \\
+\midrule
+Qwen3-VL-32B-Thinking & 核心视觉推理引擎：输入裁剪后人体帧 + 行为规则 prompt，输出结构化 JSON \\
+DeepSeek-R1-Distill-Qwen-32B & 事件聚合：把逐帧判断聚合成事件、生成告警文案 \\
+Qwen3-VL-Embedding-8B & 关键帧向量化，检索历史相似事件（可选项，时间不够可砍）\\
+Jina-Embeddings-V3 + Bce-Reranker & RAG：把课堂纪律条款切片入库，告警时匹配对应条款（可选项）\\
+YOLOv8（本地） & Baseline 对比方法 + 视频中人体检测预处理 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{数据流向：}
+视频 $\rightarrow$ 抽帧（1\,fps）$\rightarrow$ YOLOv8 检测人体并裁剪
+$\rightarrow$ Qwen3-VL 逐帧判断 $\rightarrow$ 事件聚合 $\rightarrow$ 时间轴 + 告警报告。
+
+% ============================================================
+\section{仓库目录结构}
+
+\begin{lstlisting}
+Research-Training-Program/
+├── docs/
+│   └── project_plan.tex          # 本计划
+├── src/
+│   ├── config/config.yaml        # 千帆 API Key、模型名、路径
+│   ├── data/
+│   │   ├── raw/                  # 原始视频
+│   │   ├── frames/               # 抽帧结果
+│   │   └── crops/                # 人体裁剪图
+│   ├── preprocess/
+│   │   ├── extract_frames.py      # 视频抽帧
+│   │   └── detect_persons.py     # YOLOv8 人体检测与裁剪
+│   ├── vlm_infer/
+│   │   ├── client_qwen_vl.py     # 千帆 SDK 封装
+│   │   ├── prompts.py            # 行为规则 prompt 模板
+│   │   └── run_inference.py      # 批量推理主脚本
+│   ├── aggregate/
+│   │   └── events.py              # 连续帧聚合成事件
+│   ├── baseline/
+│   │   └── yolo_rules.py         # 传统方法 baseline
+│   └── app/
+│       └── demo.py               # Streamlit 演示界面
+├── results/
+│   ├── json/                     # 逐帧推理结果
+│   ├── events/                   # 聚合后事件
+│   └── report/                   # 最终报告
+└── README.md
+\end{lstlisting}
+
+% ============================================================
+\section{十日计划总览}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{>{\bfseries}c p{3.2cm} p{7.8cm}}
+\toprule
+Day & 阶段 & 核心任务 \\
+\midrule
+1 & 环境打通 & 千帆 API 调通 Qwen3-VL，跑通第一张测试图 \\
+2 & 预处理 & 视频抽帧 + YOLOv8 人体检测裁剪 \\
+3 & 数据准备 & 自录 5 类行为样本 + 标注时间区间 \\
+4 & Prompt 工程 & 设计行为规则 prompt，让 VLM 稳定输出 JSON \\
+5 & 批量推理 & 对全部视频帧批量跑 Qwen3-VL \\
+6 & 事件聚合 & 连续帧合并为事件，抑制误报，画时间轴 \\
+7 & Baseline 对比 & YOLOv8 + 规则方法跑同一份数据，对比指标 \\
+8 & Demo 系统 & Streamlit 界面：上传视频 → 行为时间轴 → 报告 \\
+9 & 文档撰写 & 技术报告、答辩 PPT、README \\
+10 & 测试收尾 & 全流程复跑、整理代码、Git 提交 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
+\section{每日任务详解}
+
+\subsection*{Day 1 — 环境与 API 打通}
+\begin{itemize}
+  \item 在千帆平台申请 API Key，记录 \texttt{API\_KEY}、\texttt{SECRET\_KEY}。
+  \item 创建虚拟环境，安装依赖：\texttt{openai}（千帆兼容 OpenAI SDK）、\texttt{opencv-python}、\texttt{ultralytics}、\texttt{streamlit}、\texttt{pyyaml}。
+  \item 编写 \texttt{client\_qwen\_vl.py}：封装一个函数，输入「图片路径 + prompt」，输出 VLM 返回文本。
+  \item \textbf{验收：}用一张随手拍的教室照片提问「图里有几个人？他们在干什么？」，能拿到自然语言回答。
+\end{itemize}
+
+\subsection*{Day 2 — 视频预处理流水线}
+\begin{itemize}
+  \item \texttt{extract\_frames.py}：按 1\,fps 抽帧，按 \texttt{视频名/frame\_0001.jpg} 组织。
+  \item \texttt{detect\_persons.py}：加载 YOLOv8（\texttt{yolov8n.pt} 即可），检测 person 类别，
+        按 bbox 裁出人体，加 10\% padding 存入 \texttt{crops/}。
+  \item \textbf{验收：}拿一段 30 秒测试视频跑完，\texttt{crops/} 里能看到清晰的人体裁剪图。
+\end{itemize}
+
+\subsection*{Day 3 — 数据准备}
+\begin{itemize}
+  \item 找一间空教室，请 2--3 位同学配合，每类行为拍 5 段短视频（每段 30--60 秒）。
+  \item 录制清单：趴桌睡觉、低头看手机、左右张望、两人交谈、离座。
+  \item 每段视频人工记录「行为标签 + 起止秒数」，存成 \texttt{data/annotations.csv}：
+  \begin{lstlisting}
+video_id, behavior, start_sec, end_sec, note
+v01, sleeping, 5, 40, normal sleeping
+v02, looking_phone, 10, 55, ...
+  \end{lstlisting}
+  \item 可选：补充 1--2 个公开教室行为数据集片段（如 Classroom Behavior Detection）。
+  \item \textbf{验收：}至少 25 段带标注视频，覆盖全部 5 类行为。
+\end{itemize}
+
+\subsection*{Day 4 — Prompt 工程}
+\begin{itemize}
+  \item 设计行为规则 prompt 模板 \texttt{prompts.py}：
+  \begin{lstlisting}
+你是一个教室行为分析专家。请观察这张教室里的人像图片，
+判断以下行为是否正在发生，必须严格输出 JSON：
+{
+  "sleeping": 0/1,          // 是否趴桌闭眼睡觉
+  "looking_phone": 0/1,     // 是否低头看手机
+  "looking_around": 0/1,    // 是否频繁左右张望
+  "talking": 0/1,          // 是否在与人交谈
+  "reason": "一句话说明判断依据"
+}
+不确定时对应字段填 0，不要臆测。
+  \end{lstlisting}
+  \item 拿 10--20 张样本图人工测试，迭代 prompt 直到输出稳定为合法 JSON。
+  \item \textbf{验收：}连续 20 次调用都能被 \texttt{json.loads} 正确解析。
+\end{itemize}
+
+\subsection*{Day 5 — 批量推理}
+\begin{itemize}
+  \item \texttt{run\_inference.py}：遍历 \texttt{crops/}，逐张调 Qwen3-VL，
+        结果追加到 \texttt{results/json/<video\_id>.jsonl}，每行：
+  \begin{lstlisting}
+{"frame": 12, "timestamp_sec": 12.0, "behavior": {"sleeping":0, ...}, "reason": "..."}
+  \end{lstlisting}
+  \item 控制并发与重试；API 失败要能断点续跑（已存在的 frame 跳过）。
+  \item \textbf{验收：}所有视频帧跑完，结果落盘，可统计每类行为在每段视频里的帧数。
+\end{itemize}
+
+\subsection*{Day 6 — 事件聚合与后处理}
+\begin{itemize}
+  \item \texttt{events.py}：滑动窗口聚合，连续 $N=5$ 秒（或 5 帧）同标签才记为一个事件。
+  \item 过滤过短事件（$<$3 秒），抑制 VLM 偶发误报。
+  \item 输出 \texttt{results/events/<video\_id>.json}：
+  \begin{lstlisting}
+[{"behavior":"looking_phone","start":10.0,"end":48.0,"confidence":0.83}]
+  \end{lstlisting}
+  \item 画一张时间轴图（matplotlib 横条），按行为着色，人工目视检查是否合理。
+  \item \textbf{验收：}3 段测试视频的事件列表与人工标注基本吻合（误差 $<$5 秒）。
+\end{itemize}
+
+\subsection*{Day 7 — Baseline 对比实验}
+\begin{itemize}
+  \item \texttt{baseline/yolo\_rules.py}：用 YOLOv8 + MediaPipe 姿态关键点写简单规则：
+  \begin{itemize}
+    \item 头相对肩膀角度 $>$45° 且持续 $\Rightarrow$ 睡觉；
+    \item 手抬到脸附近 + 人脸不可见 $\Rightarrow$ 看手机（粗规则）；
+    \item 其余行为类 baseline 无法识别，记 N/A。
+  \end{itemize}
+  \item 在同一份测试集上统计两类方法的 Accuracy / Recall / F1。
+  \item 做成对比表（结果写进报告）。
+  \item \textbf{验收：}有一张清晰的对比表，能说出 VLM 方法在哪些类上明显优于规则法。
+\end{itemize}
+
+\subsection*{Day 8 — 演示系统}
+\begin{itemize}
+  \item \texttt{app/demo.py} 用 Streamlit：
+  \begin{itemize}
+    \item 左侧上传视频；
+    \item 中间显示处理进度与当前帧；
+    \item 下方显示行为时间轴（hover 显示 reason）；
+    \item 右侧输出事件列表与自然语言报告。
+  \end{itemize}
+  \item 可选：接 DeepSeek-R1 把事件列表生成一段中文小结。
+  \item \textbf{验收：}双击 \texttt{streamlit run app/demo.py} 能完整跑通一段视频。
+\end{itemize}
+
+\subsection*{Day 9 — 文档与报告}
+\begin{itemize}
+  \item 技术报告结构：\textbf{绪论}（背景、意义、国内外现状）$\rightarrow$
+        \textbf{方法}（系统架构、Prompt 设计、事件聚合）$\rightarrow$
+        \textbf{实验}（数据集、对比指标、结果分析）$\rightarrow$
+        \textbf{总结与展望}。
+  \item 答辩 PPT 8--10 页：背景、方法、架构图、关键结果、Demo 截图、总结。
+  \item 写 \texttt{README.md}：项目介绍、环境安装、一键运行命令、目录结构。
+  \item \textbf{验收：}报告初稿 + PPT 初稿完成。
+\end{itemize}
+
+\subsection*{Day 10 — 测试收尾}
+\begin{itemize}
+  \item 在干净环境复现：按 README 从零安装依赖、跑通一段示例视频。
+  \item 清理临时文件、敏感信息（\texttt{config.yaml} 里的 Key 改为环境变量读取，不要硬编码）。
+  \item \texttt{.gitignore} 排除：\texttt{data/raw/}、\texttt{data/frames/}、\texttt{data/crops/}、
+        \texttt{results/json/}、\texttt{*.pyc}、\texttt{.env}。
+  \item Git 提交并 push：\texttt{git add .; git commit -m "v1.0: 十日计划完成"; git push}。
+  \item \textbf{验收：}GitHub 仓库可被他人 clone 后按 README 复现 Demo。
+\end{itemize}
+
+% ============================================================
+\section{交付物清单}
+
+\begin{enumerate}
+  \item 可运行的代码仓库（GitHub：\texttt{lingnaikelian/Research-Training-Program}）；
+  \item 至少 25 段带标注的教室行为视频样本；
+  \item 一份完整技术报告（Word / PDF）；
+  \item 一份答辩 PPT；
+  \item 一个可现场演示的 Streamlit Demo；
+  \item VLM vs 传统方法的对比实验结果表。
+\end{enumerate}
+
+% ============================================================
+\section{风险与预案}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{>{\bfseries}p{4cm} p{10cm}}
+\toprule
+风险 & 预案 \\
+\midrule
+Qwen3-VL 调用慢/贵 & 降低抽帧率到 0.5\,fps；只把人体裁剪图（而非整帧）发给 VLM \\
+VLM 把看书误判为看手机 & Prompt 加区分特征；事件聚合要求连续 5 秒同标签才报警 \\
+凑不齐 25 段视频 & 降到每类 3 段共 15 段也可，重点是流程跑通 \\
+时间不够 & Qwen3-VL-Embedding 检索、RAG 校规匹配是可选项，10 天内做不完直接砍 \\
+本地无 LaTeX 环境 & 本 .tex 上传 Overleaf 编译，无需本地安装 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{1cm}
+\noindent\textit{后续每完成一天任务，在本计划对应小节后打勾并 push 一次 commit。}
+
+\end{document}
