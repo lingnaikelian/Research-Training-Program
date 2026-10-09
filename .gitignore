@@ -16,11 +16,12 @@ venv/
 src/data/raw/
 src/data/frames/
 src/data/crops/
-results/json/
-results/events/
+results/
 *.mp4
 *.avi
 *.mov
+*.rar
+*.zip
 *.jpg
 *.jpeg
 *.png
