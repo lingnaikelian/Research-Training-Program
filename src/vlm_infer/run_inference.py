@@ -30,7 +30,7 @@ def get_client():
 
 def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0,
                 crops_dir: Path = CROP_DIR, multiframe: bool = False,
-                union: bool = False):
+                union: bool = False, simple: bool = False):
     """对单个视频的裁剪图批量推理。"""
     crop_dir = crops_dir / video_name
     if not crop_dir.is_dir():
@@ -54,7 +54,8 @@ def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0,
         frames = frames[:limit]
 
     client = get_client()
-    prompt = build_prompt(multiframe=multiframe, union=union)
+    prompt = build_prompt(multiframe=multiframe, union=union,
+                          simple=simple)
     ok = skip = fail = 0
     t0 = time.time()
 
@@ -98,6 +99,8 @@ if __name__ == "__main__":
                     help="使用多帧拼接图（crops_multi/）与多帧 Prompt")
     ap.add_argument("--union", action="store_true",
                     help="使用双人联合区域多帧图（crops_union/）与联合 Prompt（优先级最高）")
+    ap.add_argument("--simple", action="store_true",
+                    help="使用简化版 Prompt（只给定义+输出格式，判断权交给模型）")
     args = ap.parse_args()
 
     if args.union:
@@ -120,10 +123,12 @@ if __name__ == "__main__":
         videos = sorted(d.name for d in use_dir.iterdir() if d.is_dir())
         for v in videos:
             infer_video(v, args.limit, crops_dir=use_dir,
-                        multiframe=multi_flag, union=args.union)
+                        multiframe=multi_flag, union=args.union,
+                        simple=args.simple)
     elif args.video:
         infer_video(args.video, args.limit, crops_dir=use_dir,
-                    multiframe=multi_flag, union=args.union)
+                    multiframe=multi_flag, union=args.union,
+                    simple=args.simple)
     else:
         print("用法: python run_inference.py <视频名> | --all [--limit N]")
         sys.exit(1)

@@ -76,13 +76,37 @@ UNION_MULTIFRAME_PROMPT = """你是一位教室行为分析专家。图中是教
 {"sleeping": 0, "looking_phone": 0, "looking_around": 0, "talking": 0, "away": 0, "reason": "一句话理由"}
 """
 
+# ===== 简化版 Prompt（把判断权交给大模型，仅给定义与输出格式）=====
+SIMPLE_PROMPT = """你是一位教室行为分析专家。图中是教室座位的**连续 6 个时刻**画面，
+排列为 2 行 × 3 列（时间从左到右、从上到下递增），可能包含 1 个或多个人。
 
-def build_prompt(multiframe: bool = False, union: bool = False) -> str:
+请观察 6 格之间的动作变化，用你的常识判断画面中正在发生哪些课堂行为，
+从以下 5 类中选择（可多选，也可都不选，每项填 0 或 1）：
+
+- sleeping：有人在睡觉或打盹（头伏在桌上，或低头闭眼长时间不动，手没有书写等动作）
+- looking_phone：有人在看手机（低头看着手机屏幕，或手持手机）
+- looking_around：有人在左右张望（头部转动看向不同方向）
+- talking：有人在交谈（与旁边的人面对面说话，嘴巴张开或侧头朝向对方）
+- away：有人离座（从坐姿起身走动、离开座位区域，或座位从有人变空）
+
+提示：重点关注人物动作随时间的变化，而不是只看某一格的静态姿态。
+不确定就填 0，不要臆测。
+
+必须严格输出以下 JSON 格式，不要输出任何其他文字：
+{"sleeping": 0, "looking_phone": 0, "looking_around": 0, "talking": 0, "away": 0, "reason": "一句话理由"}
+"""
+
+
+def build_prompt(multiframe: bool = False, union: bool = False,
+                 simple: bool = False) -> str:
     """返回行为识别 prompt。
 
-    multiframe=True 用多帧版（crops_multi 单人多帧）；
-    union=True 用双人联合区域多帧版（crops_union），优先级最高。
+    simple=True 用简化版（只给定义+输出格式，判断权交给模型），优先级最高；
+    union=True 用双人联合区域多帧版（crops_union）；
+    multiframe=True 用多帧版（crops_multi 单人多帧）。
     """
+    if simple:
+        return SIMPLE_PROMPT
     if union:
         return UNION_MULTIFRAME_PROMPT
     return MULTIFRAME_PROMPT if multiframe else BEHAVIOR_PROMPT
