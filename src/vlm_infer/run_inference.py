@@ -28,9 +28,10 @@ def get_client():
     return _client
 
 
-def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0):
+def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0,
+                crops_dir: Path = CROP_DIR, multiframe: bool = False):
     """对单个视频的裁剪图批量推理。"""
-    crop_dir = CROP_DIR / video_name
+    crop_dir = crops_dir / video_name
     if not crop_dir.is_dir():
         print(f"[FAIL] 找不到裁剪目录: {crop_dir}")
         return
@@ -52,7 +53,7 @@ def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0):
         frames = frames[:limit]
 
     client = get_client()
-    prompt = build_prompt()
+    prompt = build_prompt(multiframe=multiframe)
     ok = skip = fail = 0
     t0 = time.time()
 
@@ -90,14 +91,28 @@ if __name__ == "__main__":
     ap.add_argument("video", nargs="?", help="视频名（crops 下的目录名）")
     ap.add_argument("--all", action="store_true", help="处理全部视频")
     ap.add_argument("--limit", type=int, default=0, help="每视频只跑前 N 张")
+    ap.add_argument("--force", action="store_true",
+                    help="删除该视频旧结果后重跑（prompt 改动后使用）")
+    ap.add_argument("--multiframe", action="store_true",
+                    help="使用多帧拼接图（crops_multi/）与多帧 Prompt")
     args = ap.parse_args()
 
+    use_dir = (ROOT / "src" / "data" / "crops_multi") if args.multiframe else CROP_DIR
+
+    if args.force and args.video:
+        old = RESULT_DIR / f"{args.video}.jsonl"
+        if old.exists():
+            old.unlink()
+            print(f"[重跑] 已删除旧结果: {old.name}")
+
     if args.all:
-        videos = sorted(d.name for d in CROP_DIR.iterdir() if d.is_dir())
+        videos = sorted(d.name for d in use_dir.iterdir() if d.is_dir())
         for v in videos:
-            infer_video(v, args.limit)
+            infer_video(v, args.limit, crops_dir=use_dir,
+                        multiframe=args.multiframe)
     elif args.video:
-        infer_video(args.video, args.limit)
+        infer_video(args.video, args.limit, crops_dir=use_dir,
+                    multiframe=args.multiframe)
     else:
         print("用法: python run_inference.py <视频名> | --all [--limit N]")
         sys.exit(1)
