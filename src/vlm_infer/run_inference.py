@@ -29,7 +29,8 @@ def get_client():
 
 
 def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0,
-                crops_dir: Path = CROP_DIR, multiframe: bool = False):
+                crops_dir: Path = CROP_DIR, multiframe: bool = False,
+                union: bool = False):
     """对单个视频的裁剪图批量推理。"""
     crop_dir = crops_dir / video_name
     if not crop_dir.is_dir():
@@ -53,7 +54,7 @@ def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0,
         frames = frames[:limit]
 
     client = get_client()
-    prompt = build_prompt(multiframe=multiframe)
+    prompt = build_prompt(multiframe=multiframe, union=union)
     ok = skip = fail = 0
     t0 = time.time()
 
@@ -95,9 +96,19 @@ if __name__ == "__main__":
                     help="删除该视频旧结果后重跑（prompt 改动后使用）")
     ap.add_argument("--multiframe", action="store_true",
                     help="使用多帧拼接图（crops_multi/）与多帧 Prompt")
+    ap.add_argument("--union", action="store_true",
+                    help="使用双人联合区域多帧图（crops_union/）与联合 Prompt（优先级最高）")
     args = ap.parse_args()
 
-    use_dir = (ROOT / "src" / "data" / "crops_multi") if args.multiframe else CROP_DIR
+    if args.union:
+        use_dir = ROOT / "src" / "data" / "crops_union"
+        multi_flag = True
+    elif args.multiframe:
+        use_dir = ROOT / "src" / "data" / "crops_multi"
+        multi_flag = True
+    else:
+        use_dir = CROP_DIR
+        multi_flag = False
 
     if args.force and args.video:
         old = RESULT_DIR / f"{args.video}.jsonl"
@@ -109,10 +120,10 @@ if __name__ == "__main__":
         videos = sorted(d.name for d in use_dir.iterdir() if d.is_dir())
         for v in videos:
             infer_video(v, args.limit, crops_dir=use_dir,
-                        multiframe=args.multiframe)
+                        multiframe=multi_flag, union=args.union)
     elif args.video:
         infer_video(args.video, args.limit, crops_dir=use_dir,
-                    multiframe=args.multiframe)
+                    multiframe=multi_flag, union=args.union)
     else:
         print("用法: python run_inference.py <视频名> | --all [--limit N]")
         sys.exit(1)

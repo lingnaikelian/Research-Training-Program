@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[2]
 JSON_DIR = ROOT / "results" / "json"
 EVENT_DIR = ROOT / "results" / "events"
 FIG_DIR = ROOT / "results" / "report"
+UNION_DIR = ROOT / "src" / "data" / "crops_union"
 
 BEHAVIORS = ["sleeping", "looking_phone", "looking_around", "talking", "away"]
 BEHAVIOR_CN = {
@@ -74,7 +75,8 @@ def frame_level_series(video: str) -> dict:
             continue
         for b in BEHAVIORS:
             v = int(rec.get(b, 0) or 0)
-            series[b][idx] = max(series[b].get(idx, 0), v)
+            if v:  # 只记录触发帧；0 值帧不写入，避免切断稀疏行为事件
+                series[b][idx] = max(series[b].get(idx, 0), v)
     return series
 
 
@@ -162,9 +164,49 @@ def plot_timeline(video: str, events: list, max_sec: int = 45):
     return out
 
 
+def detector_away_events(video: str, min_frames: int = 5) -> list:
+    """检测层离座判定（追加规则，不动 VLM 逻辑）。
+
+    原理：YOLO 在抽帧上检测 person，若裁剪图在视频尾部缺失 >= min_frames 帧，
+    说明人已走出画面 -> 离座（away）。这是"目标消失"信号，比让 VLM 看裁剪图可靠。
+
+    返回: [{behavior, start, end, duration, confidence, source: 'detector'}]
+    """
+    crops_dir = ROOT / "src" / "data" / "crops" / video
+    frames_dir = ROOT / "src" / "data" / "frames" / video
+    if not crops_dir.exists() or not frames_dir.exists():
+        return []
+    total = len(list(frames_dir.glob("*.jpg")))
+    if total <= 0:
+        return []
+    maxf = -1
+    for p in crops_dir.glob("*.jpg"):
+        idx = parse_frame_index(p.name)
+        if idx >= 0:
+            maxf = max(maxf, idx)
+    tail = total - 1 - maxf
+    if tail < min_frames:
+        return []
+    return [{
+        "behavior": "away",
+        "start": maxf + 1,
+        "end": total - 1,
+        "duration": tail,
+        "confidence": round(min(tail / 15.0, 0.95), 2),
+        "source": "detector",
+    }]
+
+
 def process(video: str, min_frames: int = 5, max_gap: int = 3):
     series = frame_level_series(video)
+    # union 版（双人联合 6 帧）锚点间隔 4 秒，放宽 gap 容差避免事件被切断
+    if (UNION_DIR / video).is_dir():
+        max_gap = 6
     events = detect_events(series, min_frames, max_gap=max_gap)
+    # 追加检测层离座：VLM 未判 away 且画面尾部人消失 -> 补离座事件
+    if not any(e["behavior"] == "away" for e in events):
+        events += detector_away_events(video, min_frames)
+    events.sort(key=lambda e: (e["start"], e["behavior"]))
     EVENT_DIR.mkdir(parents=True, exist_ok=True)
     out = EVENT_DIR / f"{video}.json"
     out.write_text(json.dumps(events, ensure_ascii=False, indent=2),
