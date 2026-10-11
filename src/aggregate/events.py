@@ -81,14 +81,20 @@ def frame_level_series(video: str) -> dict:
 
 
 def detect_events(series: dict, min_frames: int = 5, stride: int = 1,
-                  max_gap: int = 3) -> list:
+                  max_gap: int = 3,
+                  behavior_minframes: dict = None) -> list:
     """连续（允许 gap <= max_gap）覆盖 >= min_frames 秒的同标签 -> 事件。
 
     stride=1 时帧号即秒；stride>1（多帧抽稀）时相邻推理帧间隔为 stride，
     事件按时间跨度判断。
+    behavior_minframes：按行为单独设置事件时长阈值（如张望/交谈等瞬态行为
+    可设更短阈值），未指定的行为用 min_frames。
     """
     events = []
     for b in BEHAVIORS:
+        mf = min_frames
+        if behavior_minframes and b in behavior_minframes:
+            mf = behavior_minframes[b]
         frames = sorted(series[b].items())
         run_start = None
         run_sec = 0
@@ -104,7 +110,7 @@ def detect_events(series: dict, min_frames: int = 5, stride: int = 1,
                         run_sec += (idx - prev_idx)
                     else:
                         # 间隔过大：收尾上一个事件，另起新事件
-                        if run_sec >= min_frames:
+                        if run_sec >= mf:
                             events.append({
                                 "behavior": b,
                                 "start": run_start,
@@ -117,7 +123,7 @@ def detect_events(series: dict, min_frames: int = 5, stride: int = 1,
                         run_sec = 1
                 prev_idx = idx
             else:
-                if run_start is not None and run_sec >= min_frames:
+                if run_start is not None and run_sec >= mf:
                     events.append({
                         "behavior": b,
                         "start": run_start,
@@ -129,7 +135,7 @@ def detect_events(series: dict, min_frames: int = 5, stride: int = 1,
                 run_start = None
                 run_sec = 0
                 prev_idx = None
-        if run_start is not None and run_sec >= min_frames:
+        if run_start is not None and run_sec >= mf:
             events.append({
                 "behavior": b,
                 "start": run_start,
@@ -197,12 +203,19 @@ def detector_away_events(video: str, min_frames: int = 5) -> list:
     }]
 
 
-def process(video: str, min_frames: int = 5, max_gap: int = 3):
+# 瞬态行为（张望/交谈）事件时长阈值：真实场景下转头/交谈多为 2~3 秒，
+# 统一 5 秒会漏掉；持续行为（睡觉/看手机/离座）仍用 5 秒。
+TRANSIENT_THRESHOLDS = {"looking_around": 3, "talking": 3}
+
+
+def process(video: str, min_frames: int = 5, max_gap: int = 3,
+            behavior_minframes: dict = None):
     series = frame_level_series(video)
     # union 版（双人联合 6 帧）锚点间隔 4 秒，放宽 gap 容差避免事件被切断
     if (UNION_DIR / video).is_dir():
         max_gap = 6
-    events = detect_events(series, min_frames, max_gap=max_gap)
+    events = detect_events(series, min_frames, max_gap=max_gap,
+                           behavior_minframes=behavior_minframes)
     # 追加检测层离座：VLM 未判 away 且画面尾部人消失 -> 补离座事件
     if not any(e["behavior"] == "away" for e in events):
         events += detector_away_events(video, min_frames)
@@ -231,8 +244,10 @@ if __name__ == "__main__":
 
     if args.all:
         for v in sorted(d.stem for d in JSON_DIR.glob("*.jsonl")):
-            process(v, args.min_frames, max_gap=3)
+            process(v, args.min_frames, max_gap=3,
+                    behavior_minframes=TRANSIENT_THRESHOLDS)
     elif args.video:
-        process(args.video, args.min_frames, max_gap=3)
+        process(args.video, args.min_frames, max_gap=3,
+                behavior_minframes=TRANSIENT_THRESHOLDS)
     else:
         print("用法: python events.py <视频名> | --all")
