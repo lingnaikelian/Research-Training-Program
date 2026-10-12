@@ -43,84 +43,162 @@ COLORS = {
     "looking_around": "#94D8C3", "talking": "#E4D48F", "away": "#EAA7B2",
 }
 
-# ---------- 页面样式（清新淡雅） ----------
-st.set_page_config(page_title="智慧校园行为分析 Demo", page_icon="🎓",
-                   layout="wide")
+st.set_page_config(page_title="教室行为智能分析", layout="wide")
+
+# ---------------- 全局样式（清新淡雅） ----------------
 st.markdown("""
 <style>
-    .block-container { padding-top: 2rem; }
-    h1 { color: #2E5B7F; }
-    h2, h3 { color: #3A6B96; }
-    .exp-box {
-        background: linear-gradient(135deg, #F0F7FC, #E8F3EC);
-        border-radius: 12px; padding: 14px 18px; margin: 8px 0;
-    }
-    .evt-chip {
-        display: inline-block; border-radius: 20px;
-        padding: 4px 14px; margin: 2px 6px 2px 0;
-        color: #fff; font-size: 14px; font-weight: 500;
-    }
+:root { --bg: #F6F8FB; --card: #FFFFFF; --line: #E7EDF3;
+        --ink: #263445; --ink2: #6B7A8C; --accent: #3E7BB6; }
+html, body, [class*="css"] { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; }
+.block-container { padding: 1.6rem 3rem 3rem; max-width: 1400px; }
+.stApp { background: var(--bg); }
+h1, h2, h3 { color: var(--ink); letter-spacing: .3px; }
+
+/* 顶部标题卡片 */
+.hero {
+    background: linear-gradient(135deg, #EEF4FA 0%, #EAF3EE 100%);
+    border: 1px solid var(--line);
+    border-radius: 16px; padding: 22px 28px; margin-bottom: 18px;
+    box-shadow: 0 2px 14px rgba(38, 52, 69, .05);
+}
+.hero h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; color: #2C5F8A; }
+.hero p { margin: 0; font-size: 13px; color: var(--ink2); }
+
+/* 通用卡片 */
+.card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px 18px; margin: 10px 0 16px;
+    box-shadow: 0 2px 12px rgba(38, 52, 69, .04);
+}
+.card h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: #34506B; }
+.card-sub { font-size: 12px; color: var(--ink2); margin-bottom: 10px; }
+
+/* 模式切换（分段控件） */
+div[data-testid="stRadio"] > div { gap: 0; }
+div[data-testid="stRadio"] label {
+    padding: 7px 22px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink2); font-size: 14px;
+    border-radius: 0; margin: 0;
+}
+div[data-testid="stRadio"] label:first-of-type { border-radius: 10px 0 0 10px; }
+div[data-testid="stRadio"] label:last-of-type { border-radius: 0 10px 10px 0; }
+div[data-testid="stRadio"] label p { color: inherit; }
+div[data-testid="stRadio"] label:hover { background: #F0F5FA; }
+div[data-testid="stRadio"] label:has(input:checked) {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+}
+div[data-testid="stRadio"] label:has(input:checked) p { color: #fff; }
+div[data-testid="stRadio"] input { display: none; }
+div[data-testid="stRadio"] > div > div > div { padding: 0; }
+div[data-testid="stRadio"] > div > div { flex-direction: row; }
+
+/* 行为标签 */
+.evt-chip {
+    display: inline-block; border-radius: 18px;
+    padding: 5px 15px; margin: 3px 7px 3px 0;
+    color: #fff; font-size: 13px; font-weight: 500;
+    box-shadow: 0 1px 5px rgba(38,52,69,.10);
+}
+.evt-chip span { font-weight: 400; opacity: .9; }
+
+/* 侧边栏 */
+[data-testid="stSidebar"] {
+    background: #FFFFFF; border-right: 1px solid var(--line);
+}
+[data-testid="stSidebar"] h3 { font-size: 14px; color: #34506B; margin-top: 6px; }
+[data-testid="stSidebar"] .evt-chip { margin: 4px 6px 4px 0; }
+
+/* 上传区与按钮 */
+[data-testid="stFileUploader"] section {
+    border: 1.5px dashed #B9CDE2; border-radius: 12px;
+    background: #FBFDFF; padding: 6px;
+}
+.stButton > button[kind="primary"] {
+    background: var(--accent); border: none; border-radius: 10px;
+    padding: 8px 28px; font-size: 14px; font-weight: 500;
+}
+.stButton > button[kind="primary"]:hover { background: #35699D; }
+
+/* 表格 */
+[data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🎓 教室行为智能分析（视觉大模型零样本方案）")
-st.caption("Qwen3-VL-32B-Thinking · 千帆私有化部署 · 5 类行为：睡觉 / 看手机 / 张望 / 交谈 / 离座")
+# ---------------- 顶部 ----------------
+st.markdown("""
+<div class="hero">
+  <h1>教室行为智能分析</h1>
+  <p>Qwen3-VL-32B-Thinking 零样本识别 · 千帆私有化部署 ·
+     5 类行为：睡觉 / 看手机 / 张望 / 交谈 / 离座</p>
+</div>
+""", unsafe_allow_html=True)
 
-mode = st.radio("选择模式", ["📁 查看已有结果", "📤 上传视频识别"],
-                horizontal=True)
+mode = st.radio("模式", ["查看已有结果", "上传视频识别"], horizontal=True,
+                label_visibility="collapsed")
 
 
 # =====================================================================
 # 模式一：查看已有结果（25 段自录视频演示）
 # =====================================================================
-if mode == "📁 查看已有结果":
+if mode == "查看已有结果":
     videos = sorted(p.stem for p in EVENT_DIR.glob("*.json"))
 
     with st.sidebar:
-        st.markdown("### 📼 选择视频")
+        st.markdown("#### 选择视频")
         video = st.selectbox("视频", videos, label_visibility="collapsed")
         prefix = video.rsplit("_", 1)[0]
         expect = PREFIX2BEHAVIOR.get(prefix, "未知")
         st.markdown(
-            f"**预期行为**：<span style='color:#2E5B7F;'>{expect}</span>",
+            f"<div class='card-sub'>预期行为："
+            f"<b style='color:#2C5F8A;'>{expect}</b></div>",
             unsafe_allow_html=True)
 
-        events = json.loads((EVENT_DIR / f"{video}.json").read_text(encoding="utf-8"))
-        st.markdown("**识别事件**")
+        events = json.loads(
+            (EVENT_DIR / f"{video}.json").read_text(encoding="utf-8"))
+        st.markdown("#### 识别事件")
         if events:
-            for e in events:
-                color = COLORS.get(e["behavior"], "#999")
-                dur = e.get("duration", 0)
-                st.markdown(
-                    f"<span class='evt-chip' style='background:{color};'>"
-                    f"{BEHAVIOR_CN[e['behavior']]} {dur}s</span>",
-                    unsafe_allow_html=True)
+            chips = "".join(
+                f"<span class='evt-chip' style='background:{COLORS.get(e['behavior'], '#9AA6B2')};'>"
+                f"{BEHAVIOR_CN[e['behavior']]} <span>{e.get('duration', 0)}s</span></span>"
+                for e in events)
+            st.markdown(chips, unsafe_allow_html=True)
         else:
-            st.markdown("无事件")
+            st.markdown("<div class='card-sub'>无事件</div>",
+                        unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("**识别流程**")
-        st.markdown("1. 抽帧 (1fps)\n2. YOLOv8 行人检测裁剪\n"
-                    "3. 多帧拼接（时序行为）\n4. VLM 零样本判断\n5. 事件聚合")
+        st.markdown("#### 识别流程")
+        st.markdown("""
+<div class='card-sub'>
+1. 抽帧 (1fps)<br>
+2. YOLOv8 行人检测裁剪<br>
+3. 多帧拼接（时序行为）<br>
+4. VLM 零样本判断<br>
+5. 事件聚合
+</div>""", unsafe_allow_html=True)
 
     c1, c2 = st.columns([1.3, 2])
 
     with c1:
-        st.markdown("### 📊 事件摘要")
+        st.markdown(
+            f"<div class='card'><h3>事件摘要</h3>"
+            f"<div class='card-sub'>{video}</div>", unsafe_allow_html=True)
         if events:
             rows = [
                 {"行为": BEHAVIOR_CN[e["behavior"]],
                  "时段": f"{e['start']}-{e['end']}s",
                  "时长": f"{e['duration']}s",
-                 "置信度": e.get("confidence", "-"),
                  "来源": "检测层" if e.get("source") == "detector" else "VLM"}
                 for e in events
             ]
             st.dataframe(rows, use_container_width=True, hide_index=True)
         else:
             st.info("该视频未识别出任何行为事件。")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("### 🖼️ 关键帧证据")
+        st.markdown("<div class='card'><h3>关键帧证据</h3>",
+                    unsafe_allow_html=True)
         fdir = FRAME_DIR / video
         if fdir.exists():
             fps = sorted(fdir.glob("frame_*.jpg"))
@@ -130,12 +208,15 @@ if mode == "📁 查看已有结果":
             for i, fp in enumerate(sample):
                 with cols[i % 3]:
                     img = Image.open(str(fp))
-                    st.image(img, caption=f"t={i * 7:.0f}s 附近", width=180)
+                    st.image(img, caption=f"t={i * 7}s 附近", width=180)
         else:
             st.warning("未找到抽帧目录")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with c2:
-        st.markdown("### ⏱️ 行为时间轴")
+        st.markdown(
+            f"<div class='card'><h3>行为时间轴</h3>"
+            f"<div class='card-sub'>{video}</div>", unsafe_allow_html=True)
         tpath = REPORT_DIR / f"{video}_timeline.png"
         if tpath.exists():
             st.image(str(tpath), use_container_width=True)
@@ -150,18 +231,19 @@ if mode == "📁 查看已有结果":
             ax.grid(axis="x", linestyle="--", alpha=0.4)
             fig.tight_layout()
             st.pyplot(fig)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
-    with st.expander("📄 技术方案说明"):
+    with st.expander("技术方案说明"):
         st.markdown("""
 **任务**：对教室监控视频进行 5 类行为识别（睡觉 / 看手机 / 张望 / 交谈 / 离座）。
 
-**方案**：采用视觉大模型零样本识别，不训练任何分类器——
-1. **预处理**：1fps 抽帧 → YOLOv8n 行人检测，裁剪出每个人；
-2. **静态行为**（看手机/睡觉）：单帧裁剪图直接送入 VLM；
-3. **时序行为**（张望/交谈/离座）：3 帧横排拼接 + 专用提示词，让 VLM 观察
-   头部转动、嘴部开合、坐姿转移动等时序信号；
-4. **事件聚合**：对逐帧判断做时间连续性合并（≥5s 记为事件），
+**方案**：视觉大模型零样本识别，不训练任何分类器——
+1. 预处理：1fps 抽帧 → YOLOv8n 行人检测，裁剪出每个人；
+2. 静态行为（看手机/睡觉）：单帧裁剪图直接送入 VLM；
+3. 时序行为（张望/交谈/离座）：多帧拼接 + 提示词，让 VLM 观察头部转动、
+   嘴部开合、坐姿转移动等时序信号；
+4. 事件聚合：逐帧判断按时间连续性合并（持续行为 ≥5s、瞬态行为 ≥3s 记为事件），
    离座补充检测层规则（行人目标消失即判定）。
 
 **模型**：Qwen3-VL-32B-Thinking（学校千帆平台私有化部署）。
@@ -173,33 +255,35 @@ if mode == "📁 查看已有结果":
 # 模式二：上传视频 → 实时识别
 # =====================================================================
 else:
-    st.markdown("### 📤 上传教室监控视频，实时判断 5 类行为")
-    st.caption("建议 10~45 秒、单人或双人入镜、视角稳定。识别耗时约 2~4 分钟"
-               "（11 张多帧图逐张调用大模型）。")
+    st.markdown("""
+<div class='card'>
+  <h3>上传视频识别</h3>
+  <div class='card-sub'>上传教室监控视频，实时判断 5 类行为。
+  建议 10~45 秒、单人或双人入镜、视角稳定。识别耗时约 2~4 分钟
+  （11 张多帧图逐张调用大模型）。</div>
+</div>""", unsafe_allow_html=True)
 
     def run_step(name: str, cmd: list, status) -> bool:
-        """执行一个管线步骤，返回是否成功。"""
-        status.update(label=f"⏳ {name} ...")
+        status.update(label=f"{name} ...")
         try:
             r = subprocess.run(cmd, capture_output=True, text=True,
                                encoding="utf-8", errors="replace",
                                timeout=900)
         except subprocess.TimeoutExpired:
-            st.error(f"❌ {name} 超时（>15 分钟）")
+            st.error(f"{name} 超时（>15 分钟）")
             return False
         out = (r.stdout or "") + (r.stderr or "")
         tail = [ln for ln in out.splitlines() if "[OK]" in ln or "[DONE]" in ln
                 or "[ERR]" in ln or "Error" in ln]
         if r.returncode != 0 and not tail:
-            st.error(f"❌ {name} 失败：{out[-600:]}")
+            st.error(f"{name} 失败：{out[-600:]}")
             return False
-        status.update(label=f"✅ {name} 完成", state="complete",
-                      expanded=False)
+        status.update(label=f"{name} 完成", state="complete", expanded=False)
         return True
 
     uploaded = st.file_uploader("选择视频文件", type=["mp4", "mov", "avi"])
     if uploaded is None:
-        st.info("👆 请先上传一个视频文件（mp4 / mov / avi）")
+        st.info("请先上传一个视频文件（mp4 / mov / avi）")
     else:
         up_id = f"up_{int(time.time())}"
         video_path = RAW_DIR / f"{up_id}.mp4"
@@ -207,7 +291,7 @@ else:
         video_path.write_bytes(uploaded.getbuffer())
         st.success(f"已接收 {uploaded.name}（{uploaded.size / 1024 / 1024:.1f} MB）")
 
-        if st.button("🚀 开始识别", type="primary"):
+        if st.button("开始识别", type="primary"):
             with st.status("正在运行识别管线 ...", expanded=True) as status:
                 steps = [
                     ("抽帧 (1fps)", [PY, "src/preprocess/extract_frames.py",
@@ -225,7 +309,7 @@ else:
                     if not run_step(name, cmd, status):
                         ok = False
                         break
-                status.update(label="🏁 识别完成" if ok else "⛔ 流程中断",
+                status.update(label="识别完成" if ok else "流程中断",
                               state="complete", expanded=False)
 
             if ok:
@@ -233,31 +317,34 @@ else:
                 events = (json.loads(ev_file.read_text(encoding="utf-8"))
                           if ev_file.exists() else [])
 
-                # ---- 结论区 ----
-                st.markdown("### 🎯 识别结论")
+                st.markdown(
+                    "<div class='card'><h3>识别结论</h3>",
+                    unsafe_allow_html=True)
                 if events:
                     chips = "".join(
-                        f"<span class='evt-chip' style='background:{COLORS[e['behavior']]};'>"
-                        f"{BEHAVIOR_CN[e['behavior']]} {e.get('duration', 0)}s"
-                        f"（{e['start']}-{e['end']}s）</span>"
-                        for e in events)
+                        f"<span class='evt-chip' style='background:{COLORS.get(e['behavior'], '#9AA6B2')};'>"
+                        f"{BEHAVIOR_CN[e['behavior']]} <span>"
+                        f"{e.get('duration', 0)}s · {e['start']}-{e['end']}s"
+                        f"</span></span>" for e in events)
                     st.markdown(chips, unsafe_allow_html=True)
                     st.markdown(
-                        f"<div class='exp-box'><b>判断依据</b>："
-                        f"{events[0].get('reason', '—')}</div>",
+                        f"<div class='card-sub' style='margin-top:10px;'>"
+                        f"判断依据：{events[0].get('reason', '—')}</div>",
                         unsafe_allow_html=True)
                 else:
                     st.info("未识别出这 5 类行为事件（画面可能为正常静坐/学习）。")
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                # ---- 时间轴 ----
-                st.markdown("### ⏱️ 行为时间轴")
+                st.markdown("<div class='card'><h3>行为时间轴</h3>",
+                            unsafe_allow_html=True)
                 tpath = REPORT_DIR / f"{up_id}_timeline.png"
                 if tpath.exists():
                     st.image(str(tpath), use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                # ---- 事件表格 ----
                 if events:
-                    st.markdown("### 📊 事件明细")
+                    st.markdown("<div class='card'><h3>事件明细</h3>",
+                                unsafe_allow_html=True)
                     rows = [
                         {"行为": BEHAVIOR_CN[e["behavior"]],
                          "时段": f"{e['start']}-{e['end']}s",
@@ -266,10 +353,12 @@ else:
                          else "VLM"}
                         for e in events
                     ]
-                    st.dataframe(rows, use_container_width=True, hide_index=True)
+                    st.dataframe(rows, use_container_width=True,
+                                 hide_index=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
-                # ---- 逐帧判断分布 ----
-                st.markdown("### 🧩 模型逐帧判断分布")
+                st.markdown("<div class='card'><h3>逐帧判断分布</h3>",
+                            unsafe_allow_html=True)
                 jl = JSON_DIR / f"{up_id}.jsonl"
                 if jl.exists():
                     cnt = {b: 0 for b in BEHAVIOR_CN}
@@ -291,6 +380,7 @@ else:
                                      hide_index=True)
                     else:
                         st.caption("模型在各帧均未触发 5 类行为。")
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                st.caption(f"本次结果已存档：results/events/{up_id}.json，"
-                           f"可在「查看已有结果」模式通过选择该视频复看（重启后仍可查看）。")
+                st.caption(f"结果已存档：results/events/{up_id}.json，"
+                           f"可在「查看已有结果」模式复看（重启后仍可查看）。")
