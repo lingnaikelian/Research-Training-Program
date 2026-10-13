@@ -243,7 +243,9 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.all:
-        for v in sorted(d.stem for d in JSON_DIR.glob("*.jsonl")):
+        # 只处理正式视频结果，跳过 *.single.jsonl 等备份文件
+        for v in sorted(d.stem for d in JSON_DIR.glob("*.jsonl")
+                        if ".single." not in d.name):
             process(v, args.min_frames, max_gap=3,
                     behavior_minframes=TRANSIENT_THRESHOLDS)
     elif args.video:
