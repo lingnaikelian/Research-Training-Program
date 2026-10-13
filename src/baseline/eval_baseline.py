@@ -1,11 +1,6 @@
-"""
-VLM vs YOLO规则基线 对比评估。
+"""VLM vs YOLO 规则基线对比评估：按视频前缀确定预期行为，统计两类方案的事件命中。
 
-对每个视频按前缀确定"预期行为"，检查 VLM 事件与 Baseline 事件是否命中该行为，
-输出对比表 results/report/vlm_vs_baseline.csv 与柱状图。
-
-用法：
-    python eval_baseline.py
+输出 results/report/vlm_vs_baseline.csv 与柱状图。
 """
 import csv
 import json
@@ -72,7 +67,6 @@ def main():
                 for e in base_events) or "无",
         })
 
-    # 汇总：按行为类别
     summary = {}
     for r in rows:
         b = r["expect"]
@@ -99,7 +93,6 @@ def main():
                 "baseline_hit": f"{s['base']}/{s['total']}",
             })
 
-    # 汇总文本
     print("类别         VLM      Baseline")
     for b in ["睡觉", "看手机", "张望", "交谈", "离座"]:
         s = summary.get(b, {"vlm": 0, "base": 0, "total": 0})
@@ -109,7 +102,6 @@ def main():
     total_n = sum(s["total"] for s in summary.values())
     print(f"合计   {total_v}/{total_n}    {total_b}/{total_n}")
 
-    # 柱状图
     cats = ["睡觉", "看手机", "张望", "交谈", "离座"]
     vlm_v = [summary.get(c, {"vlm": 0}).get("vlm", 0) for c in cats]
     base_v = [summary.get(c, {"base": 0}).get("base", 0) for c in cats]

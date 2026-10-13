@@ -1,12 +1,4 @@
-"""
-视频抽帧：按固定 fps 把视频拆成图片。
-
-用法：
-    python extract_frames.py <video_path> [--fps 1]
-
-输出：
-    src/data/frames/<视频文件名>/frame_0001.jpg
-"""
+"""视频抽帧：按固定 fps 把视频拆成图片，输出到 src/data/frames/<视频名>/。"""
 import argparse
 from pathlib import Path
 import cv2
@@ -27,7 +19,7 @@ def extract(video_path: str, fps: float = 1.0):
     cap = cv2.VideoCapture(str(video_path))
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    step = max(1, round(src_fps / fps))  # 每 step 帧取一张
+    step = max(1, round(src_fps / fps))
 
     idx = 0
     saved = 0

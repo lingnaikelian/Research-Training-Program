@@ -14,7 +14,7 @@ ROOT = Path.cwd()
 JSON_DIR = ROOT / "results" / "json"
 UNION_DIR = ROOT / "src" / "data" / "crops_union"
 
-# 前缀 -> 预期行为（英文键，与事件 behavior 字段一致）
+# 视频名前缀 -> 预期行为
 PREFIX2BEHAVIOR_EN = {
     "sleeping": "sleeping", "phone": "looking_phone",
     "looking_around": "looking_around", "talking": "talking",

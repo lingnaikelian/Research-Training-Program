@@ -1,11 +1,4 @@
-"""
-行为识别 Prompt 模板。
-
-核心设计：
-- 只给模型看"一个人的裁剪图"，让它基于该人姿态判断行为
-- 输出严格 JSON，字段固定，降低解析难度
-- 明确告诉模型"不确定就填 0，不要臆测"（抑制幻觉）
-"""
+"""行为识别 Prompt 模板。"""
 
 BEHAVIOR_PROMPT = """你是一位教室行为分析专家。图中是一个人（或空座位区域）的截取画面。
 
@@ -27,7 +20,7 @@ BEHAVIOR_PROMPT = """你是一位教室行为分析专家。图中是一个人�
 {"sleeping": 0, "looking_phone": 0, "looking_around": 0, "talking": 0, "away": 0, "reason": "一句话理由"}
 """
 
-# ===== 多帧版 Prompt（连续 3 帧拼接图，能看出动作变化）=====
+# 多帧版 Prompt（连续 3 帧拼接图）
 MULTIFRAME_PROMPT = """你是一位教室行为分析专家。图中是**同一个人**连续 3 个时刻的画面，
 按从左到右的时间顺序排列（第1格最早，第3格最晚）。
 
@@ -51,7 +44,7 @@ MULTIFRAME_PROMPT = """你是一位教室行为分析专家。图中是**同一�
 {"sleeping": 0, "looking_phone": 0, "looking_around": 0, "talking": 0, "away": 0, "reason": "一句话理由"}
 """
 
-# ===== 双人联合区域多帧版 Prompt（6 帧 2x3 网格，能看多人互动与动作轨迹）=====
+# 双人联合区域多帧版 Prompt（6 帧 2x3 网格）
 UNION_MULTIFRAME_PROMPT = """你是一位教室行为分析专家。图中是教室座位的**连续 6 个时刻**画面，
 按时间顺序排列为 2 行 × 3 列（第一行从左到右是最早的第1~3格，第二行从左到右是第4~6格，整体时间从左到右、从上到下递增）。
 画面可能包含**1 个或多个人**，重点关注**人与人的互动**和**动作随时间的变化**。
@@ -76,7 +69,7 @@ UNION_MULTIFRAME_PROMPT = """你是一位教室行为分析专家。图中是教
 {"sleeping": 0, "looking_phone": 0, "looking_around": 0, "talking": 0, "away": 0, "reason": "一句话理由"}
 """
 
-# ===== 简化版 Prompt（把判断权交给大模型，仅给定义与输出格式）=====
+# 简化版 Prompt（只给定义与输出格式，判断权交给模型）
 SIMPLE_PROMPT = """你是一位教室行为分析专家。图中是教室座位的**连续 6 个时刻**画面，
 排列为 2 行 × 3 列（时间从左到右、从上到下递增），可能包含 1 个或多个人。
 
@@ -104,9 +97,8 @@ def build_prompt(multiframe: bool = False, union: bool = False,
                  simple: bool = False) -> str:
     """返回行为识别 prompt。
 
-    simple=True 用简化版（只给定义+输出格式，判断权交给模型），优先级最高；
-    union=True 用双人联合区域多帧版（crops_union）；
-    multiframe=True 用多帧版（crops_multi 单人多帧）。
+    simple 优先级最高（判断权交给模型）；union 为双人联合区域多帧版；
+    multiframe 为单人三帧版；都不选时用单帧版。
     """
     if simple:
         return SIMPLE_PROMPT

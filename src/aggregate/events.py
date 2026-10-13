@@ -1,19 +1,9 @@
-"""
-事件聚合：把逐帧行为判断合并成"事件"。
+"""事件聚合：把逐帧行为判断按时间连续性合并成事件。
 
-逻辑（帧级聚合）：
-1. 读 results/json/<video>.jsonl
-2. 每帧把该帧所有 person 的行为合并：某行为被任一 person 触发 -> 该帧标记 1
-3. 对每个行为单独扫描时间连续性：连续 >= min_frames 帧（1fps = 秒）记为一个事件
-4. 过滤过短事件，输出 results/events/<video>.json + 时间轴图
-
-用法：
-    python events.py <video_name>        # 单视频
-    python events.py --all               # 全部
+输出 results/events/<video>.json 与时间轴图 results/report/<video>_timeline.png。
 """
 import argparse
 import json
-from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -75,7 +65,8 @@ def frame_level_series(video: str) -> dict:
             continue
         for b in BEHAVIORS:
             v = int(rec.get(b, 0) or 0)
-            if v:  # 只记录触发帧；0 值帧不写入，避免切断稀疏行为事件
+            if v:
+                # 只记录触发帧，避免稀疏 0 值切断连续事件
                 series[b][idx] = max(series[b].get(idx, 0), v)
     return series
 
@@ -85,10 +76,8 @@ def detect_events(series: dict, min_frames: int = 5, stride: int = 1,
                   behavior_minframes: dict = None) -> list:
     """连续（允许 gap <= max_gap）覆盖 >= min_frames 秒的同标签 -> 事件。
 
-    stride=1 时帧号即秒；stride>1（多帧抽稀）时相邻推理帧间隔为 stride，
-    事件按时间跨度判断。
-    behavior_minframes：按行为单独设置事件时长阈值（如张望/交谈等瞬态行为
-    可设更短阈值），未指定的行为用 min_frames。
+    stride=1 时帧号即秒；stride>1（多帧抽稀）时相邻推理帧间隔为 stride。
+    behavior_minframes 可为特定行为单独设置时长阈值。
     """
     events = []
     for b in BEHAVIORS:
@@ -105,11 +94,9 @@ def detect_events(series: dict, min_frames: int = 5, stride: int = 1,
                     run_start = idx
                     run_sec = 1
                 else:
-                    # 允许推理帧之间的间隔（gap <= max_gap 视为连续）
                     if prev_idx is not None and (idx - prev_idx) <= max_gap:
                         run_sec += (idx - prev_idx)
                     else:
-                        # 间隔过大：收尾上一个事件，另起新事件
                         if run_sec >= mf:
                             events.append({
                                 "behavior": b,
@@ -174,9 +161,7 @@ def detector_away_events(video: str, min_frames: int = 5) -> list:
     """检测层离座判定（追加规则，不动 VLM 逻辑）。
 
     原理：YOLO 在抽帧上检测 person，若裁剪图在视频尾部缺失 >= min_frames 帧，
-    说明人已走出画面 -> 离座（away）。这是"目标消失"信号，比让 VLM 看裁剪图可靠。
-
-    返回: [{behavior, start, end, duration, confidence, source: 'detector'}]
+    说明人已走出画面，即"目标消失"信号，比让 VLM 看裁剪图可靠。
     """
     crops_dir = ROOT / "src" / "data" / "crops" / video
     frames_dir = ROOT / "src" / "data" / "frames" / video
@@ -203,20 +188,20 @@ def detector_away_events(video: str, min_frames: int = 5) -> list:
     }]
 
 
-# 瞬态行为（张望/交谈）事件时长阈值：真实场景下转头/交谈多为 2~3 秒，
-# 统一 5 秒会漏掉；持续行为（睡觉/看手机/离座）仍用 5 秒。
+# 张望/交谈为瞬态行为，真实场景多为 2~3 秒，统一 5 秒会漏掉；
+# 持续行为（睡觉/看手机/离座）仍用 5 秒。
 TRANSIENT_THRESHOLDS = {"looking_around": 3, "talking": 3}
 
 
 def process(video: str, min_frames: int = 5, max_gap: int = 3,
             behavior_minframes: dict = None):
     series = frame_level_series(video)
-    # union 版（双人联合 6 帧）锚点间隔 4 秒，放宽 gap 容差避免事件被切断
+    # union 版锚点间隔 4 秒，放宽 gap 容差避免事件被切断
     if (UNION_DIR / video).is_dir():
         max_gap = 6
     events = detect_events(series, min_frames, max_gap=max_gap,
                            behavior_minframes=behavior_minframes)
-    # 追加检测层离座：VLM 未判 away 且画面尾部人消失 -> 补离座事件
+    # 追加检测层离座：VLM 未判 away 且画面尾部人消失时补离座事件
     if not any(e["behavior"] == "away" for e in events):
         events += detector_away_events(video, min_frames)
     events.sort(key=lambda e: (e["start"], e["behavior"]))
@@ -224,7 +209,6 @@ def process(video: str, min_frames: int = 5, max_gap: int = 3,
     out = EVENT_DIR / f"{video}.json"
     out.write_text(json.dumps(events, ensure_ascii=False, indent=2),
                    encoding="utf-8")
-    # 摘要
     summary = "、".join(
         f"{BEHAVIOR_CN[e['behavior']]}{e['duration']}s" for e in events) or "无事件"
     print(f"[OK] {video}: {len(events)} 个事件 -> {summary}")
@@ -243,7 +227,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.all:
-        # 只处理正式视频结果，跳过 *.single.jsonl 等备份文件
+        # 只处理正式结果，跳过 *.single.jsonl 备份文件
         for v in sorted(d.stem for d in JSON_DIR.glob("*.jsonl")
                         if ".single." not in d.name):
             process(v, args.min_frames, max_gap=3,

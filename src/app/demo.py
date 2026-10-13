@@ -1,13 +1,10 @@
-"""
-Streamlit 演示应用：教室行为智能分析（视觉大模型方案）
+"""Streamlit 演示应用：教室行为智能分析。
 
 两种模式：
-1. 查看已有结果：展示 25 段自录视频的零样本行为识别结果（读取 results/）
-2. 上传视频识别：上传任意教室监控视频，实时跑完整识别管线（抽帧→检测→
-   多帧拼接→VLM 推理→事件聚合），判断 5 类行为
+1. 查看已有结果：浏览 25 段自录视频的识别结果（results/）
+2. 上传视频识别：上传视频后跑完整识别管线（抽帧→检测→拼接→VLM→聚合）
 
-启动：
-    streamlit run src/app/demo.py
+启动：streamlit run src/app/demo.py
 """
 import json
 import subprocess
@@ -18,9 +15,8 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import streamlit as st
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 EVENT_DIR = ROOT / "results" / "events"
@@ -53,16 +49,20 @@ def html_table(headers, rows):
 
 st.set_page_config(page_title="教室行为智能分析", layout="wide")
 
-# ---------------- 全局样式（清新淡雅） ----------------
 st.markdown("""
 <style>
 :root { --bg: #F6F8FB; --card: #FFFFFF; --line: #E7EDF3;
         --ink: #263445; --ink2: #6B7A8C; --accent: #3E7BB6; }
 html, body, [class*="css"] { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; }
 :root, html, body { color-scheme: light; }  /* 强制浅色渲染，避免系统深色模式把组件变黑 */
-.block-container { padding: 1.6rem 3rem 3rem; max-width: 1400px; }
+.block-container { padding: 1.6rem 2.5rem 3rem 0.8rem; max-width: 1500px; }
 
-/* 页面背景：柔和蓝绿氛围渐变 */
+/* 侧边栏收窄，减少与主界面的空隙 */
+[data-testid="stSidebar"] {
+    min-width: 300px !important; max-width: 300px !important;
+    width: 300px !important;
+}
+
 .stApp {
     background:
         radial-gradient(1100px 420px at 18% -6%, rgba(139,200,234,.16) 0%, rgba(139,200,234,0) 60%),
@@ -71,15 +71,14 @@ html, body, [class*="css"] { font-family: 'Microsoft YaHei', 'PingFang SC', sans
 }
 h1, h2, h3 { color: var(--ink); letter-spacing: .3px; }
 
-/* 隐藏 Streamlit 顶部工具条（深色 header + Deploy 按钮），避免黑色横条 */
+/* 隐藏 Streamlit 顶部工具条，避免深色 header 横条 */
 [data-testid="stHeader"] { display: none; }
 [data-testid="stToolbar"] { display: none !important; }
 
-/* 顶部标题卡片 */
 .hero {
     background: linear-gradient(120deg, #EAF3FB 0%, #E7F3EC 55%, #FBF4E9 100%);
     border: 1px solid var(--line);
-    border-radius: 16px; padding: 22px 28px; margin-bottom: 18px;
+    border-radius: 14px; padding: 12px 24px; margin-bottom: 10px;
     box-shadow: 0 3px 16px rgba(46, 91, 127, .06);
     position: relative; overflow: hidden;
 }
@@ -87,13 +86,12 @@ h1, h2, h3 { color: var(--ink); letter-spacing: .3px; }
     content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     background: linear-gradient(90deg, #8BC8EA, #94D8C3, #E4D48F);
 }
-.hero h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; color: #2C5F8A; }
-.hero p { margin: 0; font-size: 13px; color: var(--ink2); }
+.hero h1 { margin: 0; font-size: 28px; font-weight: 600; color: #2C5F8A; }
+.hero p { margin: 0; font-size: 15px; color: var(--ink2); }
 
-/* 通用卡片：细腻阴影 + 顶部彩色细线 */
 .card {
     background: var(--card); border: 1px solid var(--line);
-    border-radius: 14px; padding: 16px 18px; margin: 10px 0 16px;
+    border-radius: 14px; padding: 14px 18px; margin: 8px 0 14px;
     box-shadow: 0 4px 18px rgba(46, 91, 127, .06);
     position: relative; overflow: hidden;
 }
@@ -101,14 +99,18 @@ h1, h2, h3 { color: var(--ink); letter-spacing: .3px; }
     content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     background: linear-gradient(90deg, #8BC8EA, #94D8C3);
 }
-.card h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: #34506B; }
-.card-sub { font-size: 12px; color: var(--ink2); margin-bottom: 10px; }
+.card h3 { margin: 0 0 12px; font-size: 18px; font-weight: 600; color: #34506B; }
+.card-sub { font-size: 14px; color: var(--ink2); margin-bottom: 10px; }
 
-/* 模式切换（分段控件） */
+.stMarkdown p, .stMarkdown li { font-size: 15px; }
+.stMarkdown h4 { font-size: 17px; }
+.stInfo, .stSuccess, .stWarning, .stError { font-size: 14px; }
+.stCaption, .stCaption p { font-size: 13px; color: var(--ink2); }
+
 div[data-testid="stRadio"] > div { gap: 0; }
 div[data-testid="stRadio"] label {
-    padding: 7px 22px; border: 1px solid var(--line);
-    background: #fff; color: var(--ink2); font-size: 14px;
+    padding: 9px 26px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink2); font-size: 16px;
     border-radius: 0; margin: 0;
 }
 div[data-testid="stRadio"] label:first-of-type { border-radius: 10px 0 0 10px; }
@@ -123,11 +125,10 @@ div[data-testid="stRadio"] input { display: none; }
 div[data-testid="stRadio"] > div > div > div { padding: 0; }
 div[data-testid="stRadio"] > div > div { flex-direction: row; }
 
-/* 行为标签 */
 .evt-chip {
     display: inline-block; border-radius: 18px;
-    padding: 5px 15px; margin: 3px 7px 3px 0;
-    color: #fff; font-size: 13px; font-weight: 500;
+    padding: 7px 18px; margin: 3px 7px 3px 0;
+    color: #fff; font-size: 15px; font-weight: 500;
     box-shadow: 0 2px 6px rgba(38,52,69,.12);
 }
 .evt-chip span { font-weight: 400; opacity: .9; }
@@ -143,14 +144,13 @@ div[data-testid="stRadio"] > div > div { flex-direction: row; }
 }
 [data-testid="stSidebar"] .evt-chip { margin: 4px 6px 4px 0; }
 
-/* 预期行为徽章 */
 .expect-badge {
     display: inline-block; background: #EDF5FB; color: #2C5F8A;
     border: 1px solid #C9DDF0; border-radius: 8px;
-    padding: 3px 12px; font-size: 13px; font-weight: 500;
+    padding: 4px 14px; font-size: 15px; font-weight: 500;
 }
 
-/* 下拉框（selectbox）强制浅色，不随系统深色主题变黑 */
+/* 下拉框强制浅色，不随系统深色主题变黑 */
 [data-testid="stSelectbox"] [data-baseweb="select"] > div {
     background: #FFFFFF !important; border-color: var(--line) !important;
 }
@@ -160,7 +160,6 @@ div[data-testid="stRadio"] > div > div { flex-direction: row; }
 [data-testid="stSelectbox"] [data-baseweb="select"] svg {
     fill: var(--ink2) !important;
 }
-/* 下拉菜单 */
 [data-baseweb="popover"] [data-baseweb="menu"] {
     background: #FFFFFF !important; color: var(--ink) !important;
 }
@@ -171,19 +170,18 @@ div[data-testid="stRadio"] > div > div { flex-direction: row; }
 }
 
 /* 自定义浅色表格（替代 st.dataframe，不随系统深色主题变黑） */
-table.tbl { width: 100%; border-collapse: collapse; font-size: 13px;
+table.tbl { width: 100%; border-collapse: collapse; font-size: 15px;
             margin: 2px 0 6px; }
 table.tbl th {
     background: linear-gradient(180deg, #F0F5FA, #EAF2F8);
     color: #34506B; text-align: left;
-    padding: 9px 14px; font-weight: 600; border-bottom: 1px solid var(--line);
+    padding: 11px 16px; font-weight: 600; border-bottom: 1px solid var(--line);
 }
-table.tbl td { padding: 9px 14px; border-bottom: 1px solid #EEF2F7;
+table.tbl td { padding: 11px 16px; border-bottom: 1px solid #EEF2F7;
                color: var(--ink); }
 table.tbl tbody tr:nth-child(even) { background: #FAFCFE; }
 table.tbl tbody tr:hover { background: #F2F7FC; }
 
-/* 上传区与按钮 */
 [data-testid="stFileUploader"] section {
     border: 1.5px dashed #B9CDE2; border-radius: 12px;
     background: #FBFDFF; padding: 6px;
@@ -197,12 +195,9 @@ table.tbl tbody tr:hover { background: #F2F7FC; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- 顶部 ----------------
 st.markdown("""
 <div class="hero">
   <h1>教室行为智能分析</h1>
-  <p>Qwen3-VL-32B-Thinking 零样本识别 · 千帆私有化部署 ·
-     5 类行为：睡觉 / 看手机 / 张望 / 交谈 / 离座</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -210,9 +205,6 @@ mode = st.radio("模式", ["查看已有结果", "上传视频识别"], horizont
                 label_visibility="collapsed")
 
 
-# =====================================================================
-# 模式一：查看已有结果（25 段自录视频演示）
-# =====================================================================
 if mode == "查看已有结果":
     videos = sorted(p.stem for p in EVENT_DIR.glob("*.json"))
 
@@ -240,15 +232,14 @@ if mode == "查看已有结果":
                         unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("#### 识别流程")
-        st.markdown("""
-<div class='card-sub'>
-1. 抽帧 (1fps)<br>
-2. YOLOv8 行人检测裁剪<br>
-3. 多帧拼接（时序行为）<br>
-4. VLM 零样本判断<br>
-5. 事件聚合
-</div>""", unsafe_allow_html=True)
+        st.markdown("#### 行为图例")
+        legend = "".join(
+            f"<div style='display:flex;align-items:center;gap:9px;"
+            f"margin:6px 0;font-size:15px;color:#6B7A8C;'>"
+            f"<span style='width:12px;height:12px;border-radius:50%;"
+            f"background:{COLORS[b]};display:inline-block;'></span>"
+            f"{BEHAVIOR_CN[b]}</div>" for b in BEHAVIOR_CN)
+        st.markdown(legend, unsafe_allow_html=True)
 
     c1, c2 = st.columns([1.3, 2])
 
@@ -312,28 +303,22 @@ if mode == "查看已有结果":
 **任务**：对教室监控视频进行 5 类行为识别（睡觉 / 看手机 / 张望 / 交谈 / 离座）。
 
 **方案**：视觉大模型零样本识别，不训练任何分类器——
-1. 预处理：1fps 抽帧 → YOLOv8n 行人检测，裁剪出每个人；
-2. 静态行为（看手机/睡觉）：单帧裁剪图直接送入 VLM；
-3. 时序行为（张望/交谈/离座）：多帧拼接 + 提示词，让 VLM 观察头部转动、
-   嘴部开合、坐姿转移动等时序信号；
-4. 事件聚合：逐帧判断按时间连续性合并（持续行为 ≥5s、瞬态行为 ≥3s 记为事件），
+1. 预处理：1fps 抽帧 → YOLOv8n 行人检测，取画面中所有行人的联合区域；
+2. 统一送入 VLM：将连续 6 个时刻的联合区域图拼接为 2×3 网格（多帧拼接），
+   让 VLM 观察头部转动、嘴部开合、手部动作、坐姿转移动等时序信号；
+3. 事件聚合：逐帧判断按时间连续性合并（持续行为 ≥5s、瞬态行为 ≥3s 记为事件），
    离座补充检测层规则（行人目标消失即判定）。
 
-**模型**：Qwen3-VL-32B-Thinking（学校千帆平台私有化部署）。
-**对比实验**：YOLOv8-pose 姿态规则基线，见 `results/report/vlm_vs_baseline.png`。
+**模型**：Qwen3-VL-32B-Thinking。
 """)
 
-
-# =====================================================================
-# 模式二：上传视频 → 实时识别
-# =====================================================================
 else:
     st.markdown("""
 <div class='card'>
   <h3>上传视频识别</h3>
   <div class='card-sub'>上传教室监控视频，实时判断 5 类行为。
-  建议 10~45 秒、单人或双人入镜、视角稳定。识别耗时约 2~4 分钟
-  （11 张多帧图逐张调用大模型）。</div>
+  建议 10~45 秒、单人或双人入镜、视角稳定。识别耗时约 3~6 分钟
+  （多帧图逐张调用大模型，耗时随视频长度与服务端负载波动）。</div>
 </div>""", unsafe_allow_html=True)
 
     def run_step(name: str, cmd: list, status) -> bool:

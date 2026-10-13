@@ -1,11 +1,6 @@
-"""
-批量行为推理：遍历 crops/<video>/ 下的裁剪图，逐张调 Qwen3-VL，
-结果追加到 results/json/<video>.jsonl（支持断点续跑）。
+"""批量行为推理：遍历裁剪图逐张调 Qwen3-VL，结果追加到 results/json/<video>.jsonl。
 
-用法：
-    python run_inference.py <video_name>          # 只跑一个视频
-    python run_inference.py --all                 # 跑全部视频
-    python run_inference.py <video_name> --limit 10   # 只跑前10张（测试）
+支持断点续跑（已处理的帧自动跳过），服务端失败可重复运行重试。
 """
 import argparse
 import json
@@ -69,7 +64,7 @@ def infer_video(video_name: str, limit: int = 0, sleep_sec: float = 0.0,
                 record = {
                     "crop": fp.name,
                     "video": video_name,
-                    **result,  # sleeping / looking_phone / ... / reason
+                    **result,
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 f.flush()

@@ -1,15 +1,7 @@
-"""
-多帧拼接（双人联合区域版）：针对"多人互动"行为（交谈/张望/离座）。
+"""多帧拼接：取每帧所有行人的联合区域，按 stride 抽稀后把连续 6 个时刻
+拼成 2 行 x 3 列网格，让 VLM 同时看到多人位置关系与动作变化。
 
-问题背景：单人裁剪图让 VLM 看不到"两人面对面交谈"的上下文，导致交谈识别差。
-本脚本重跑 YOLO 检测，取每帧所有 person 的外接联合区域（union bbox + padding），
-按 stride 抽稀后，把同一视频连续 6 个时刻的联合区域图拼成 2 行 × 3 列网格，
-让 VLM 同时看到多人的位置关系与动作变化。
-
-输入：src/data/frames/<video>/frame_*.jpg
 输出：src/data/crops_union/<video>/frame_00000_union.jpg
-
-用法：python build_union_multi.py <video ...> [--stride 4] [--resize 256]
 """
 import argparse
 import sys
@@ -26,12 +18,12 @@ from src.preprocess.cv_utils import imread_unicode, imwrite_unicode
 FRAME_DIR = ROOT / "src" / "data" / "frames"
 UNION_DIR = ROOT / "src" / "data" / "crops_union"
 
-GRAY = np.full((300, 300, 3), 180, dtype=np.uint8)  # 缺帧占位块
+GRAY = np.full((300, 300, 3), 180, dtype=np.uint8)  # 缺帧占位
 PAD_RATIO = 0.1
 
 
 def get_union_boxes(video: str, model, conf: float = 0.3):
-    """对视频每帧跑 YOLO，返回 {frame_idx: [(x1,y1,x2,y2), ...]} 原始 bbox。"""
+    """对视频每帧跑 YOLO，返回 {frame_idx: [(x1,y1,x2,y2), ...]}。"""
     frame_dir = FRAME_DIR / video
     result = {}
     for fp in sorted(frame_dir.glob("frame_*.jpg")):
@@ -51,7 +43,7 @@ def build_union(video: str, stride: int = 4, resize_h: int = 256):
     if not frame_dir.is_dir():
         print(f"[跳过] 无 {video}")
         return
-    model = YOLO(ROOT / "yolov8n-pose.pt")  # 本地已有；同样输出 person bbox
+    model = YOLO(ROOT / "src" / "preprocess" / "yolov8n-pose.pt")
     boxes_by_frame = get_union_boxes(video, model)
     if not boxes_by_frame:
         print(f"[跳过] {video} 无检测结果")
@@ -64,7 +56,6 @@ def build_union(video: str, stride: int = 4, resize_h: int = 256):
     anchors = [f for f in frame_idxs if f % stride == 0]
     made = 0
     for f in anchors:
-        # 取 f-4*5 .. f 共 6 个时刻（间隔 stride）
         times = [f - stride * k for k in range(5, -1, -1)]
         tiles = []
         for t in times:
@@ -72,7 +63,6 @@ def build_union(video: str, stride: int = 4, resize_h: int = 256):
             if not boxes:
                 tiles.append(GRAY)
                 continue
-            # union bbox
             x1 = min(b[0] for b in boxes)
             y1 = min(b[1] for b in boxes)
             x2 = max(b[2] for b in boxes)
@@ -86,7 +76,6 @@ def build_union(video: str, stride: int = 4, resize_h: int = 256):
             y2 = min(h, int(y2 + bh * PAD_RATIO))
             tiles.append(img[y1:y2, x1:x2])
 
-        # 统一高度后，再统一宽度（不足用灰色居中补齐），2 行 × 3 列
         target_h = max(t.shape[0] for t in tiles)
         tiles2 = []
         for t in tiles:

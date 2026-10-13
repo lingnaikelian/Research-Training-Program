@@ -1,12 +1,4 @@
-"""
-千帆平台 Qwen3-VL 客户端封装。
-
-用法：
-    from client_qwen_vl import QwenVLClient
-    client = QwenVLClient()
-    result = client.analyze_image("test.jpg", "这张图里有几个人？")
-"""
-
+"""千帆平台 Qwen3-VL 客户端封装（兼容 OpenAI SDK 协议）。"""
 import os
 import base64
 import json
@@ -14,7 +6,6 @@ from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# 加载项目根目录下的 .env
 ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT / ".env")
 
@@ -29,7 +20,6 @@ class QwenVLClient:
         if not self.base_url:
             raise RuntimeError("未设置 QIANFAN_BASE_URL，请检查 .env 文件")
 
-        # 校内私有化部署的千帆，兼容 OpenAI SDK 协议
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -47,17 +37,7 @@ class QwenVLClient:
 
     def analyze_image(self, image_path: str, prompt: str,
                       expect_json: bool = True) -> dict | str:
-        """
-        传一张本地图片 + 一段 prompt 给 Qwen3-VL，返回模型输出。
-
-        Args:
-            image_path: 本地图片路径
-            prompt: 给模型的指令
-            expect_json: 是否要求模型输出 JSON 并自动解析
-
-        Returns:
-            expect_json=True 时返回 dict；否则返回原始字符串
-        """
+        """传一张本地图片 + 一段 prompt 给 Qwen3-VL，返回模型输出。"""
         if not self.vl_endpoint:
             raise RuntimeError(
                 "未设置 QIANFAN_VL_ENDPOINT。请先到千帆控制台部署 "
@@ -74,7 +54,7 @@ class QwenVLClient:
                     {"type": "text", "text": prompt},
                 ],
             }],
-            temperature=0.1,  # 行为识别要稳定，调低温度
+            temperature=0.1,  # 行为识别需要稳定输出，调低温度
             max_tokens=2000,  # Thinking 模型思考过程占 token，必须给够
         )
         text = resp.choices[0].message.content.strip()
@@ -84,7 +64,7 @@ class QwenVLClient:
         return text
 
     def chat_text(self, prompt: str) -> str:
-        """纯文本对话（用 LLM endpoint，Day 6 事件聚合时用）。"""
+        """纯文本对话（用 LLM endpoint）。"""
         if not self.llm_endpoint:
             raise RuntimeError("未设置 QIANFAN_LLM_ENDPOINT")
         resp = self.client.chat.completions.create(
@@ -97,7 +77,6 @@ class QwenVLClient:
     @staticmethod
     def _parse_json(text: str) -> dict:
         """从模型输出里抠出 JSON 对象，容忍 ```json 包裹和前后废话。"""
-        # 去掉 ```json ... ``` 包裹
         if "```" in text:
             parts = text.split("```")
             for seg in parts:
@@ -107,7 +86,6 @@ class QwenVLClient:
                 if seg.startswith("{"):
                     text = seg
                     break
-        # 找到第一个 { 到最后一个 }
         start = text.find("{")
         end = text.rfind("}")
         if start == -1 or end == -1:
@@ -116,7 +94,6 @@ class QwenVLClient:
 
 
 if __name__ == "__main__":
-    # 直接运行此文件做连通性测试
     c = QwenVLClient()
     print(f"[OK] 客户端初始化成功，API Key 已加载")
     print(f"     VL Endpoint: {c.vl_endpoint or '(未设置)'}")

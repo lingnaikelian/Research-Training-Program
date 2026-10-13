@@ -1,18 +1,12 @@
-"""
-YOLOv8-pose 规则基线（Baseline）：用姿态关键点的简单规则识别教室行为，
-与 VLM 零样本方案做对比实验。规则阈值固定，不针对测试集调优。
+"""YOLOv8-pose 规则基线：用姿态关键点规则识别教室行为，与 VLM 零样本方案对比。
 
-规则（帧级，对每个 person）：
+规则阈值固定，不针对测试集调优：
 - away       : YOLO 检测不到 person 且位于视频尾部（目标消失=离座）
 - sleeping   : 关键点平均置信度 < 0.55（趴桌时姿态估计质量差）
-- looking_phone: 明显低头（nose_y - 肩中_y > 0.12*图像高）
-- looking_around / talking : 姿态规则无法区分，基线不识别（记为 0）
+- looking_phone: 明显低头（鼻尖低于肩中线超过阈值）
+- looking_around / talking : 姿态规则无法区分，基线不识别
 
-输出：results/baseline/<video>.json（事件列表，与 VLM 事件同格式）
-
-用法：
-    python yolo_rules.py <video>     # 单视频
-    python yolo_rules.py --all       # 全部 25 个
+输出：results/baseline/<video>.json（与 VLM 事件同格式）
 """
 import argparse
 import json
@@ -23,7 +17,7 @@ import cv2
 from ultralytics import YOLO
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))  # 使 from src... 可用
+sys.path.insert(0, str(ROOT))
 from src.preprocess.cv_utils import imread_unicode
 FRAME_DIR = ROOT / "src" / "data" / "frames"
 OUT_DIR = ROOT / "results" / "baseline"
@@ -35,12 +29,12 @@ BEHAVIOR_CN = {
 }
 
 KP_CONF_SLEEP = 0.55      # 趴桌时关键点置信度阈值
-NOSE_BELOW_SH = 0.05      # 低头：鼻尖低于肩中线 5% 图像高（常识阈值，0.12 过严）
+NOSE_BELOW_SH = 0.05      # 低头：鼻尖低于肩中线 5% 图像高
 
 
 def detect_events_from_series(series: dict, min_frames: int = 5,
                               max_gap: int = 3) -> list:
-    """与 events.py 相同的事件聚合逻辑（复制自 detect_events，独立可运行）。"""
+    """与 events.py 相同的事件聚合逻辑（独立实现，便于单独运行）。"""
     events = []
     for b in BEHAVIORS:
         frames = sorted(series[b].items())
@@ -101,10 +95,9 @@ def frame_level_rules(video: str, min_frames: int = 5) -> dict:
         return series
     fps = sorted(frame_dir.glob("frame_*.jpg"))
     model = get_model()
-    seen_person_last = None  # 最后一帧出现 person 的帧号
+    seen_person_last = None
 
-    # 第一遍：逐帧 pose，记录所有帧的检测状态
-    frame_persons = {}  # idx -> [(kp_conf, nose_y, sh_y, img_h)]
+    frame_persons = {}
     for fp in fps:
         idx = int(fp.stem.split("_")[1])
         img = imread_unicode(fp)
@@ -121,11 +114,9 @@ def frame_level_rules(video: str, min_frames: int = 5) -> dict:
                 seen_person_last = idx
         frame_persons[idx] = persons
 
-    # 第二遍：判定行为
     total = len(fps)
     for idx, persons in frame_persons.items():
         if not persons:
-            # person 缺失：若在尾部且之前出现过 -> away
             if seen_person_last is not None and idx > seen_person_last:
                 series["away"][idx] = 1
             continue
@@ -134,9 +125,7 @@ def frame_level_rules(video: str, min_frames: int = 5) -> dict:
                 series["sleeping"][idx] = 1
             elif (nose_y - shy) > NOSE_BELOW_SH * h:
                 series["looking_phone"][idx] = 1
-            # 其他（张望/交谈/正常）不识别
-
-    # away 用连续缺失段语义：缺失帧已在上面标记，交给事件聚合
+            # 张望/交谈等姿态规则无法识别，基线记为 0
     return series
 
 

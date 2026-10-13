@@ -1,7 +1,7 @@
 # 项目进度记录（PROGRESS）
 
 > 下次开始前先读本文件，就能知道做到哪一步、下一步做什么。
-> 最后更新：2026-10-10（准确率优化中：双人联合区域 6 帧方案重跑 6 个失败视频）
+> 最后更新：2026-10-13（提交包完成 + 权重路径统一 + 上传识别实测）
 
 ---
 
@@ -11,7 +11,7 @@
 - **场景**：教室/图书馆，识别 5 类行为（睡觉 / 看手机 / 张望 / 交谈 / 离座）
 - **仓库**：git@github.com:lingnaikelian/Research-Training-Program.git
 - **本地路径**：`E:\科研训练计划`
-- **计划文档**：`docs/project_plan.tex`
+- **计划文档**：`docs/project_plan.tex`（工作区已删，需用 `git show HEAD:docs/project_plan.tex` 恢复）
 
 ## 环境与关键配置
 
@@ -29,20 +29,20 @@
 2. **Thinking 模型**：`max_tokens>=2000`，答案在 `content`，思考在 `reasoning_content`
 3. **JSON 容错**：`_parse_json` 处理 ```json 包裹和废话
 4. **长推理用 Start-Process 独立进程**，别用 run_in_background（会被中断）
-5. **单帧 vs 多帧**：静态行为（看手机/睡觉）单帧足够；时序行为（张望/交谈/离座）
-   必须多帧拼接（`make_multiframe.py`，3帧横排 + MULTIFRAME_PROMPT）
+5. **模型权重一律用固定绝对路径**：`YOLO(ROOT / "src" / "preprocess" / "*.pt")`，
+   严禁裸文件名相对路径（会按 cwd 找并误触发自动下载）
 6. **重跑多帧前要删旧 jsonl**（断点续跑会跳过已存在的 crop 名）
-7. **失败帧处理**：`fix_missing.py` 把模型没输出 JSON 的帧补"无行为"记录
+7. **失败帧处理**：断点续跑重试即可；服务端偶发空 JSON 多试几次会成功
 8. **matplotlib 中文**：rcParams 设 Microsoft YaHei
 
 ## 数据与流程现状
 
 - 25 段视频（5 行为 × 5 段）在 `src/data/raw/`（已 gitignore）
 - 抽帧 1fps → `src/data/frames/`；YOLOv8 裁剪 → `src/data/crops/`
-- **推理结果**：`results/json/<video>.jsonl`
-  - 看手机/睡觉 10 个：单帧版（效果好）
-  - 交谈/张望/离座 15 个：多帧版（stride=3，拼接图在 `crops_multi/`）
+- **推理结果**：`results/json/<video>.jsonl`（根目录 results/，代码写死此路径）
 - **事件聚合**：`results/events/<video>.json` + `results/report/<video>_timeline.png`
+- **统一管线**（任意视频无需先验分类）：抽帧 1fps → YOLO 检测 → 6帧 union 拼接
+  （stride 4, resize 192）→ VLM(简化 prompt) → 事件聚合，demo 上传模式即此管线
 
 ## 最终识别效果（25 视频，事件级命中率）——优化后 23/25 = 92%
 
@@ -106,9 +106,6 @@
 - **层次**：架构级改进（union 6 帧拼接 / 简化 prompt / 3 秒阈值）对全类有效；
   密集采样是最后针对性的补丁。报告按此层次叙事，不夸大
 
-注意：`--union` 推理只覆盖锚点帧（stride=4），`fix_missing.py` 会按 crops_multi 补录
-"无行为"记录（帧名 person 版），与 union 记录共存，事件聚合按帧号取 max 合并。
-
 ## 离座检测层规则（已完成）
 
 原理：YOLO person 在视频尾部消失 >=5 帧 = 人走出画面 = 离座信号。
@@ -157,58 +154,49 @@ leaving_02~05 尾部缺失 27~33 帧 → 全部识别出离座；其余 20 视�
 `src/app/demo.py`：左侧选视频 → 事件摘要表 + 行为时间轴图 + 关键帧证据 + 方案说明。
 清新淡雅配色。启动：`streamlit run src/app/demo.py`（已验证 HTTP 200）。
 
-**2026-10-13 界面美化与问题修复**（全部已应用，尚未提交）：
+**2026-10-13 界面美化与问题修复**（全部已应用，本次提交）：
 - 新增 `.streamlit/config.toml`：官方浅色主题（base="light" + 主色/背景/文字），根治系统深色模式
 - 隐藏 Streamlit 顶部黑色工具条（stHeader/stToolbar）；`color-scheme: light` 全局强制浅色
 - 三处黑色组件修复：顶部工具条、事件表格（st.dataframe → 自定义浅色 html_table）、侧边栏下拉框（selectbox 浅色覆盖 + 下拉菜单浅色）
 - 二次美化：页面背景蓝绿氛围光晕、卡片顶部彩色细线+细腻阴影、侧边栏淡蓝渐变、标题卡片三色渐变、预期行为徽章、表头微渐变、上传按钮淡蓝投影
-- 用户确认：黑色区域全部消失；下一步待反馈"白色单调"后的美化迭代
+- 说明文案改为"识别耗时约 3~6 分钟（多帧图逐张调用大模型，耗时随视频长度与服务端负载波动）"
 
-## 下一步（Day 9-10）
+## 2026-10-13 收尾工作（提交包 + 权重路径统一 + 上传识别实测）
 
-1. **准确率优化（进行中）**：双人联合区域 6 帧方案（crops_union + UNION_MULTIFRAME_PROMPT）
-   重跑 6 个失败视频（talking_01/03/04/05、looking_around_01、leaving_01）
-   - 新增脚本：`src/preprocess/build_union_multi.py`（YOLO 重检 → union bbox → 2×3 网格）
-   - `prompts.py` 追加 `UNION_MULTIFRAME_PROMPT`（区分交谈/看手机/写字 + 离座变化）
-   - `run_inference.py` 追加 `--union` 参数
-   - sleeping_04 确认是**数据标签问题**（视频内容是写字非睡觉，模型判 0 正确），记入报告
-   - 推理完成后：重新事件聚合 → 重跑 eval → 更新效果表
-2. **技术报告**（`docs/report/`）：实验设置、方法、结果表/图、对比分析、局限与展望
-3. **答辩 PPT**：用 ppt skill 做 10-15 页
-4. **README 完善**：项目说明、目录结构、复现步骤
-5. **成果展示视频**：录 demo 或合成演示视频
-6. 最终整体交付：git push + PROGRESS 更新
+- **代码规范化（已完成，本次提交）**：13 个脚本重写去 AI 痕迹（docstring 压成一句、删分节装饰线与冗余注释、清未用 import）；`prompts.py` 四个模型指令正文一字未动；删除 6 个冗余脚本（make_multiframe/make_test_video/test_connection/test_image/fix_missing/eval_quality）+ `crops_multi/` 数据
+- **results 目录修复**：正式数据移至根目录 `results/`（此前被误移入 docs/，代码写死读根目录）；删除 `docs/results` 9 个实验日志（与正式结果冗余）；`list_misses.py` 复跑确认 23 OK / 2 MISS（sleeping_04、talking_03 均为定案案例）
+- **提交包（`教室行为检测app/`，独立交付物，不入 git）**：只含可运行 app（demo + 管线代码 + 权重 + setup.py/start.py/README/.env.example + 空目录结构），不含结果数据/中间产物/PROGRESS/git/PDF/requirements；已验证独立启动 HTTP 200、`setup.py` 环境检测通过；查看模式无数据时提示而非报错
+- **权重路径统一（本次提交）**：`detect_persons.py` 相对路径 `YOLO("yolov8n.pt")`（按 cwd 找，会误触发自动下载）→ 固定 `ROOT/src/preprocess/yolov8n.pt`；`build_union_multi.py` 同步改为 `ROOT/src/preprocess/yolov8n-pose.pt`；两权重统一放 `src/preprocess/`，根目录旧权重已删；提交包 `setup.py`/README 同步更新
+- **上传识别实测（app 内）**：用户上传 46.9MB 视频，完整管线跑通——抽帧 42 帧 → 检测 42 人体 → 11 张 union 图 → VLM 11/11（2 次服务端偶发空 JSON，断点续跑补成功）→ 事件聚合：**看手机 37s** ✓
+- **demo 已知小问题（未修）**：上传视频后每次页面 rerun 会重复把视频另存一份到 raw/（up_*.mp4 堆积），不影响识别；"预期行为"对 up_ 前缀显示"未知"属正常（无标注），用户确认不改
+- **工作流新约定**：之后修改默认只改 `E:\科研训练计划`（原项目），除非用户明确说要改 `教室行为检测app/`
+
+## 下一步待办
+
+核心实验已完成：VLM 23/25 (92%) vs Baseline 9/25 (36%)，代码已在仓库。
+
+- [ ] **成果展示视频**（老师要求①）：从未动工。素材：25 段 raw 视频 + 时间轴图 + 对比图 + demo 录屏
+- [ ] **结题报告 ~10 页**（老师要求②）：从未动工。骨架：选题背景→方案设计（管线图）→实验设置→
+      结果（23/25 vs 9/25 对比表/图）→案例时间轴→局限与讨论（talking_03 混合行为、
+      sleeping_04 数据标签与画面不符等）→结论
+- [ ] **答辩 PPT 10-15 页**（老师要求③）：从未动工。需先 Read ppt/SKILL.md；风格清新淡雅
+- [ ] **老师要求达标检查**：用户 10-13 提问"已完成内容能否通过答辩"——结论：实验与 demo 已达标，
+      三项交付物（视频/报告/PPT）是答辩必需品，未动工，开工前须用户同意
+
+**工作流约定**：用户说"结束今天的工作" → 提交远程仓库 + 更新本文件；"继续昨天的工作" → 先读本文件定位起点。之后修改默认只改原项目（除非用户点名 app）。
 
 ## 常用命令
 
 ```powershell
-# 推理（单帧）
-cd src\vlm_infer; python run_inference.py --all
-# 推理（多帧重跑，先删旧 jsonl）
-python run_inference.py <视频> --multiframe --force
-# 生成多帧拼接图
-cd ..\preprocess; python make_multiframe.py <视频...> --stride 3 --resize 150
-# 补全失败帧
-cd ..\aggregate; python fix_missing.py
-# 事件聚合+时间轴
-python events.py --all
-# 识别质量统计
-python eval_quality.py
+# 推理（统一 union 管线，断点续跑）
+cd E:\科研训练计划
+python src/preprocess/extract_frames.py <视频.mp4> --fps 1
+python src/preprocess/detect_persons.py src/data/frames/<视频名>
+python src/preprocess/build_union_multi.py <视频名> --stride 4 --resize 192
+python src/vlm_infer/run_inference.py <视频名> --union --simple
+python src/aggregate/events.py <视频名>
+# 命中检查
+python scripts/list_misses.py
+# 启动 demo
+streamlit run src/app/demo.py
 ```
-
-## 下一步待办（2026-10-10 收工时状态）
-
-核心实验已完成：VLM 21/25 (84%) vs Baseline 9/25 (36%)，代码全部在仓库（最新 commit 93d2dff）。
-
-- [ ] **成果展示视频**（老师要求①）：从未动工。素材：25 段 raw 视频 + 时间轴图 + 对比图 + demo 录屏
-- [ ] **结题报告 ~10 页**（老师要求②）：从未动工。骨架：选题背景→方案设计（管线图）→实验设置→
-      结果（21/25 vs 9/25 对比表/图）→案例时间轴→局限与讨论（交谈 2 段动作幅度小、
-      sleeping_04 数据标签与画面不符等）→结论
-- [ ] **答辩 PPT 10-15 页**（老师要求③）：从未动工。需先 Read ppt/SKILL.md；风格清新淡雅
-- [ ] **sleeping_04 收尾（已定）**：用户 10-11 决定**不重拍**，按 4/5 收。
-      报告"数据与标注质量"一节以它为案例：标签意图为睡觉、画面实际为低头书写，
-      零样本模型不被标签预期带偏（判 0 正确），是模型鲁棒性的体现（附 union 图证据）
-- [ ] **剩余短板（如实记录，不夸大）**：sleeping_04 与 talking_03 均已定案（见上，作为
-      "数据标签与画面不符"与"混合行为/模型局限"案例写入报告"局限与讨论"）
-
-**工作流约定**：用户说"结束今天的工作" → 提交远程仓库 + 更新本文件；"继续昨天的工作" → 先读本文件定位起点。
