@@ -20,7 +20,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps
 
 ROOT = Path(__file__).resolve().parents[2]
 EVENT_DIR = ROOT / "results" / "events"
@@ -43,6 +43,14 @@ COLORS = {
     "looking_around": "#94D8C3", "talking": "#E4D48F", "away": "#EAA7B2",
 }
 
+
+def html_table(headers, rows):
+    """自定义浅色表格（不随系统深色主题变黑）。"""
+    thead = "".join(f"<th>{h}</th>" for h in headers)
+    tbody = "".join(
+        f"<tr>{''.join(f'<td>{c}</td>' for c in row)}</tr>" for row in rows)
+    return f"<table class='tbl'><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>"
+
 st.set_page_config(page_title="教室行为智能分析", layout="wide")
 
 # ---------------- 全局样式（清新淡雅） ----------------
@@ -51,25 +59,47 @@ st.markdown("""
 :root { --bg: #F6F8FB; --card: #FFFFFF; --line: #E7EDF3;
         --ink: #263445; --ink2: #6B7A8C; --accent: #3E7BB6; }
 html, body, [class*="css"] { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; }
+:root, html, body { color-scheme: light; }  /* 强制浅色渲染，避免系统深色模式把组件变黑 */
 .block-container { padding: 1.6rem 3rem 3rem; max-width: 1400px; }
-.stApp { background: var(--bg); }
+
+/* 页面背景：柔和蓝绿氛围渐变 */
+.stApp {
+    background:
+        radial-gradient(1100px 420px at 18% -6%, rgba(139,200,234,.16) 0%, rgba(139,200,234,0) 60%),
+        radial-gradient(900px 380px at 92% 0%, rgba(148,216,195,.14) 0%, rgba(148,216,195,0) 55%),
+        var(--bg);
+}
 h1, h2, h3 { color: var(--ink); letter-spacing: .3px; }
+
+/* 隐藏 Streamlit 顶部工具条（深色 header + Deploy 按钮），避免黑色横条 */
+[data-testid="stHeader"] { display: none; }
+[data-testid="stToolbar"] { display: none !important; }
 
 /* 顶部标题卡片 */
 .hero {
-    background: linear-gradient(135deg, #EEF4FA 0%, #EAF3EE 100%);
+    background: linear-gradient(120deg, #EAF3FB 0%, #E7F3EC 55%, #FBF4E9 100%);
     border: 1px solid var(--line);
     border-radius: 16px; padding: 22px 28px; margin-bottom: 18px;
-    box-shadow: 0 2px 14px rgba(38, 52, 69, .05);
+    box-shadow: 0 3px 16px rgba(46, 91, 127, .06);
+    position: relative; overflow: hidden;
+}
+.hero::after {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #8BC8EA, #94D8C3, #E4D48F);
 }
 .hero h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; color: #2C5F8A; }
 .hero p { margin: 0; font-size: 13px; color: var(--ink2); }
 
-/* 通用卡片 */
+/* 通用卡片：细腻阴影 + 顶部彩色细线 */
 .card {
     background: var(--card); border: 1px solid var(--line);
     border-radius: 14px; padding: 16px 18px; margin: 10px 0 16px;
-    box-shadow: 0 2px 12px rgba(38, 52, 69, .04);
+    box-shadow: 0 4px 18px rgba(46, 91, 127, .06);
+    position: relative; overflow: hidden;
+}
+.card::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #8BC8EA, #94D8C3);
 }
 .card h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: #34506B; }
 .card-sub { font-size: 12px; color: var(--ink2); margin-bottom: 10px; }
@@ -98,16 +128,60 @@ div[data-testid="stRadio"] > div > div { flex-direction: row; }
     display: inline-block; border-radius: 18px;
     padding: 5px 15px; margin: 3px 7px 3px 0;
     color: #fff; font-size: 13px; font-weight: 500;
-    box-shadow: 0 1px 5px rgba(38,52,69,.10);
+    box-shadow: 0 2px 6px rgba(38,52,69,.12);
 }
 .evt-chip span { font-weight: 400; opacity: .9; }
 
-/* 侧边栏 */
+/* 侧边栏：淡蓝渐变过渡 */
 [data-testid="stSidebar"] {
-    background: #FFFFFF; border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, #F1F7FB 0%, #FFFFFF 55%);
+    border-right: 1px solid var(--line);
 }
-[data-testid="stSidebar"] h3 { font-size: 14px; color: #34506B; margin-top: 6px; }
+[data-testid="stSidebar"] h3 {
+    font-size: 14px; color: #34506B; margin-top: 6px;
+    border-left: 3px solid #8BC8EA; padding-left: 8px;
+}
 [data-testid="stSidebar"] .evt-chip { margin: 4px 6px 4px 0; }
+
+/* 预期行为徽章 */
+.expect-badge {
+    display: inline-block; background: #EDF5FB; color: #2C5F8A;
+    border: 1px solid #C9DDF0; border-radius: 8px;
+    padding: 3px 12px; font-size: 13px; font-weight: 500;
+}
+
+/* 下拉框（selectbox）强制浅色，不随系统深色主题变黑 */
+[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+    background: #FFFFFF !important; border-color: var(--line) !important;
+}
+[data-testid="stSelectbox"] [data-baseweb="select"] * {
+    color: var(--ink) !important;
+}
+[data-testid="stSelectbox"] [data-baseweb="select"] svg {
+    fill: var(--ink2) !important;
+}
+/* 下拉菜单 */
+[data-baseweb="popover"] [data-baseweb="menu"] {
+    background: #FFFFFF !important; color: var(--ink) !important;
+}
+[data-baseweb="menu"] li { color: var(--ink) !important; }
+[data-baseweb="menu"] li:hover,
+[data-baseweb="menu"] li[aria-selected="true"] {
+    background: #F0F5FA !important; color: var(--ink) !important;
+}
+
+/* 自定义浅色表格（替代 st.dataframe，不随系统深色主题变黑） */
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px;
+            margin: 2px 0 6px; }
+table.tbl th {
+    background: linear-gradient(180deg, #F0F5FA, #EAF2F8);
+    color: #34506B; text-align: left;
+    padding: 9px 14px; font-weight: 600; border-bottom: 1px solid var(--line);
+}
+table.tbl td { padding: 9px 14px; border-bottom: 1px solid #EEF2F7;
+               color: var(--ink); }
+table.tbl tbody tr:nth-child(even) { background: #FAFCFE; }
+table.tbl tbody tr:hover { background: #F2F7FC; }
 
 /* 上传区与按钮 */
 [data-testid="stFileUploader"] section {
@@ -117,11 +191,9 @@ div[data-testid="stRadio"] > div > div { flex-direction: row; }
 .stButton > button[kind="primary"] {
     background: var(--accent); border: none; border-radius: 10px;
     padding: 8px 28px; font-size: 14px; font-weight: 500;
+    box-shadow: 0 2px 8px rgba(62,123,182,.25);
 }
 .stButton > button[kind="primary"]:hover { background: #35699D; }
-
-/* 表格 */
-[data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -150,8 +222,8 @@ if mode == "查看已有结果":
         prefix = video.rsplit("_", 1)[0]
         expect = PREFIX2BEHAVIOR.get(prefix, "未知")
         st.markdown(
-            f"<div class='card-sub'>预期行为："
-            f"<b style='color:#2C5F8A;'>{expect}</b></div>",
+            f"<div class='card-sub'>预期行为 "
+            f"<span class='expect-badge'>{expect}</span></div>",
             unsafe_allow_html=True)
 
         events = json.loads(
@@ -186,13 +258,14 @@ if mode == "查看已有结果":
             f"<div class='card-sub'>{video}</div>", unsafe_allow_html=True)
         if events:
             rows = [
-                {"行为": BEHAVIOR_CN[e["behavior"]],
-                 "时段": f"{e['start']}-{e['end']}s",
-                 "时长": f"{e['duration']}s",
-                 "来源": "检测层" if e.get("source") == "detector" else "VLM"}
+                [BEHAVIOR_CN[e["behavior"]],
+                 f"{e['start']}-{e['end']}s",
+                 f"{e['duration']}s",
+                 "检测层" if e.get("source") == "detector" else "VLM"]
                 for e in events
             ]
-            st.dataframe(rows, use_container_width=True, hide_index=True)
+            st.markdown(html_table(["行为", "时段", "时长", "来源"], rows),
+                        unsafe_allow_html=True)
         else:
             st.info("该视频未识别出任何行为事件。")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -346,15 +419,14 @@ else:
                     st.markdown("<div class='card'><h3>事件明细</h3>",
                                 unsafe_allow_html=True)
                     rows = [
-                        {"行为": BEHAVIOR_CN[e["behavior"]],
-                         "时段": f"{e['start']}-{e['end']}s",
-                         "时长": f"{e['duration']}s",
-                         "来源": "检测层" if e.get("source") == "detector"
-                         else "VLM"}
+                        [BEHAVIOR_CN[e["behavior"]],
+                         f"{e['start']}-{e['end']}s",
+                         f"{e['duration']}s",
+                         "检测层" if e.get("source") == "detector" else "VLM"]
                         for e in events
                     ]
-                    st.dataframe(rows, use_container_width=True,
-                                 hide_index=True)
+                    st.markdown(html_table(["行为", "时段", "时长", "来源"], rows),
+                                unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("<div class='card'><h3>逐帧判断分布</h3>",
@@ -371,13 +443,13 @@ else:
                         for b in BEHAVIOR_CN:
                             cnt[b] += int(rec.get(b, 0) or 0)
                     dist = [
-                        {"行为": BEHAVIOR_CN[b], "触发帧数": cnt[b],
-                         "占比": f"{cnt[b] / max(n, 1) * 100:.0f}%"}
+                        [BEHAVIOR_CN[b], str(cnt[b]),
+                         f"{cnt[b] / max(n, 1) * 100:.0f}%"]
                         for b in BEHAVIOR_CN if cnt[b] > 0
                     ]
                     if dist:
-                        st.dataframe(dist, use_container_width=True,
-                                     hide_index=True)
+                        st.markdown(html_table(["行为", "触发帧数", "占比"], dist),
+                                    unsafe_allow_html=True)
                     else:
                         st.caption("模型在各帧均未触发 5 类行为。")
                 st.markdown("</div>", unsafe_allow_html=True)
