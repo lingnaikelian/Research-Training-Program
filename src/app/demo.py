@@ -7,6 +7,7 @@
 启动：streamlit run src/app/demo.py
 """
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -23,6 +24,8 @@ EVENT_DIR = ROOT / "results" / "events"
 REPORT_DIR = ROOT / "results" / "report"
 FRAME_DIR = ROOT / "src" / "data" / "frames"
 RAW_DIR = ROOT / "src" / "data" / "raw"
+CROP_DIR = ROOT / "src" / "data" / "crops"
+UNION_DIR = ROOT / "src" / "data" / "crops_union"
 JSON_DIR = ROOT / "results" / "json"
 PY = sys.executable
 
@@ -46,6 +49,30 @@ def html_table(headers, rows):
     tbody = "".join(
         f"<tr>{''.join(f'<td>{c}</td>' for c in row)}</tr>" for row in rows)
     return f"<table class='tbl'><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>"
+
+
+def delete_video_data(video: str):
+    """删除某视频的全部数据：原始视频、抽帧、裁剪、拼接、推理结果、时间轴。"""
+    targets = [
+        RAW_DIR / f"{video}.mp4",
+        FRAME_DIR / video,
+        CROP_DIR / video,
+        UNION_DIR / video,
+        JSON_DIR / f"{video}.jsonl",
+        JSON_DIR / f"{video}.single.jsonl",
+        EVENT_DIR / f"{video}.json",
+        REPORT_DIR / f"{video}_timeline.png",
+        REPORT_DIR / f"{video}.single_timeline.png",
+    ]
+    removed = []
+    for t in targets:
+        if t.is_dir():
+            shutil.rmtree(t, ignore_errors=True)
+            removed.append(t)
+        elif t.exists():
+            t.unlink()
+            removed.append(t)
+    return removed
 
 st.set_page_config(page_title="教室行为智能分析", layout="wide")
 
@@ -240,6 +267,26 @@ if mode == "查看已有结果":
             f"background:{COLORS[b]};display:inline-block;'></span>"
             f"{BEHAVIOR_CN[b]}</div>" for b in BEHAVIOR_CN)
         st.markdown(legend, unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("#### 删除数据")
+        del_key = f"del_confirm_{video}"
+        if not st.session_state.get(del_key, False):
+            if st.button("删除该视频的全部数据", width="stretch"):
+                st.session_state[del_key] = True
+                st.rerun()
+        else:
+            st.warning("将一并删除：原始视频、抽帧、裁剪图、拼接图、"
+                       "推理结果与时间轴，无法恢复。")
+            c1, c2 = st.columns(2)
+            if c1.button("确认删除", width="stretch"):
+                removed = delete_video_data(video)
+                st.session_state[del_key] = False
+                st.success(f"已删除 {len(removed)} 项数据。")
+                st.rerun()
+            if c2.button("取消", width="stretch"):
+                st.session_state[del_key] = False
+                st.rerun()
 
     c1, c2 = st.columns([1.3, 2])
 
