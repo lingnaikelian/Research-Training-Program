@@ -64,15 +64,18 @@ def delete_video_data(video: str):
         REPORT_DIR / f"{video}_timeline.png",
         REPORT_DIR / f"{video}.single_timeline.png",
     ]
-    removed = []
+    removed, failed = [], []
     for t in targets:
-        if t.is_dir():
-            shutil.rmtree(t, ignore_errors=True)
-            removed.append(t)
-        elif t.exists():
-            t.unlink()
-            removed.append(t)
-    return removed
+        try:
+            if t.is_dir():
+                shutil.rmtree(t)
+                removed.append(t)
+            elif t.exists():
+                t.unlink()
+                removed.append(t)
+        except Exception as e:
+            failed.append((t, e))
+    return removed, failed
 
 st.set_page_config(page_title="教室行为智能分析", layout="wide")
 
@@ -280,8 +283,11 @@ if mode == "查看已有结果":
                        "推理结果与时间轴，无法恢复。")
             c1, c2 = st.columns(2)
             if c1.button("确认删除", width="stretch"):
-                removed = delete_video_data(video)
+                removed, failed = delete_video_data(video)
                 st.session_state[del_key] = False
+                if failed:
+                    names = "、".join(str(t.relative_to(ROOT)) for t, _ in failed)
+                    st.error(f"以下 {len(failed)} 项删除失败：{names}")
                 st.success(f"已删除 {len(removed)} 项数据。")
                 st.rerun()
             if c2.button("取消", width="stretch"):
@@ -390,11 +396,30 @@ else:
     if uploaded is None:
         st.info("请先上传一个视频文件（mp4 / mov / avi）")
     else:
-        up_id = f"up_{int(time.time())}"
+        fid = getattr(uploaded, "file_id", id(uploaded))
+        if st.session_state.get("last_upload_id") != fid:
+            st.session_state.last_upload_id = fid
+            st.session_state.up_id = f"up_{int(time.time())}"
+        up_id = st.session_state.up_id
         video_path = RAW_DIR / f"{up_id}.mp4"
-        video_path.parent.mkdir(parents=True, exist_ok=True)
-        video_path.write_bytes(uploaded.getbuffer())
+        if not video_path.exists():
+            video_path.parent.mkdir(parents=True, exist_ok=True)
+            video_path.write_bytes(uploaded.getbuffer())
         st.success(f"已接收 {uploaded.name}（{uploaded.size / 1024 / 1024:.1f} MB）")
+
+        orphans = sorted(p.name for p in RAW_DIR.glob("up_*.mp4")
+                         if not (EVENT_DIR / f"{p.stem}.json").exists()
+                         and p.name != f"{up_id}.mp4")
+        if orphans:
+            st.divider()
+            st.markdown("#### 未识别的孤立上传")
+            st.caption("以下文件只有原始视频、没有识别结果，可单独删除：")
+            for name in orphans:
+                c1, c2 = st.columns([4, 1])
+                c1.caption(name)
+                if c2.button("删除", key=f"del_orphan_{name}"):
+                    (RAW_DIR / name).unlink(missing_ok=True)
+                    st.rerun()
 
         if st.button("开始识别", type="primary"):
             with st.status("正在运行识别管线 ...", expanded=True) as status:

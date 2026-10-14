@@ -7,6 +7,7 @@
 启动：streamlit run src/app/demo.py
 """
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -23,6 +24,8 @@ EVENT_DIR = ROOT / "results" / "events"
 REPORT_DIR = ROOT / "results" / "report"
 FRAME_DIR = ROOT / "src" / "data" / "frames"
 RAW_DIR = ROOT / "src" / "data" / "raw"
+CROP_DIR = ROOT / "src" / "data" / "crops"
+UNION_DIR = ROOT / "src" / "data" / "crops_union"
 JSON_DIR = ROOT / "results" / "json"
 PY = sys.executable
 
@@ -46,6 +49,33 @@ def html_table(headers, rows):
     tbody = "".join(
         f"<tr>{''.join(f'<td>{c}</td>' for c in row)}</tr>" for row in rows)
     return f"<table class='tbl'><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>"
+
+
+def delete_video_data(video: str):
+    """删除某视频的全部数据：原始视频、抽帧、裁剪、拼接、推理结果、时间轴。"""
+    targets = [
+        RAW_DIR / f"{video}.mp4",
+        FRAME_DIR / video,
+        CROP_DIR / video,
+        UNION_DIR / video,
+        JSON_DIR / f"{video}.jsonl",
+        JSON_DIR / f"{video}.single.jsonl",
+        EVENT_DIR / f"{video}.json",
+        REPORT_DIR / f"{video}_timeline.png",
+        REPORT_DIR / f"{video}.single_timeline.png",
+    ]
+    removed, failed = [], []
+    for t in targets:
+        try:
+            if t.is_dir():
+                shutil.rmtree(t)
+                removed.append(t)
+            elif t.exists():
+                t.unlink()
+                removed.append(t)
+        except Exception as e:
+            failed.append((t, e))
+    return removed, failed
 
 st.set_page_config(page_title="教室行为智能分析", layout="wide")
 
@@ -246,6 +276,29 @@ if mode == "查看已有结果":
             f"{BEHAVIOR_CN[b]}</div>" for b in BEHAVIOR_CN)
         st.markdown(legend, unsafe_allow_html=True)
 
+        st.divider()
+        st.markdown("#### 删除数据")
+        del_key = f"del_confirm_{video}"
+        if not st.session_state.get(del_key, False):
+            if st.button("删除该视频的全部数据", width="stretch"):
+                st.session_state[del_key] = True
+                st.rerun()
+        else:
+            st.warning("将一并删除：原始视频、抽帧、裁剪图、拼接图、"
+                       "推理结果与时间轴，无法恢复。")
+            c1, c2 = st.columns(2)
+            if c1.button("确认删除", width="stretch"):
+                removed, failed = delete_video_data(video)
+                st.session_state[del_key] = False
+                if failed:
+                    names = "、".join(str(t.relative_to(ROOT)) for t, _ in failed)
+                    st.error(f"以下 {len(failed)} 项删除失败：{names}")
+                st.success(f"已删除 {len(removed)} 项数据。")
+                st.rerun()
+            if c2.button("取消", width="stretch"):
+                st.session_state[del_key] = False
+                st.rerun()
+
     c1, c2 = st.columns([1.3, 2])
 
     with c1:
@@ -348,11 +401,30 @@ else:
     if uploaded is None:
         st.info("请先上传一个视频文件（mp4 / mov / avi）")
     else:
-        up_id = f"up_{int(time.time())}"
+        fid = getattr(uploaded, "file_id", id(uploaded))
+        if st.session_state.get("last_upload_id") != fid:
+            st.session_state.last_upload_id = fid
+            st.session_state.up_id = f"up_{int(time.time())}"
+        up_id = st.session_state.up_id
         video_path = RAW_DIR / f"{up_id}.mp4"
-        video_path.parent.mkdir(parents=True, exist_ok=True)
-        video_path.write_bytes(uploaded.getbuffer())
+        if not video_path.exists():
+            video_path.parent.mkdir(parents=True, exist_ok=True)
+            video_path.write_bytes(uploaded.getbuffer())
         st.success(f"已接收 {uploaded.name}（{uploaded.size / 1024 / 1024:.1f} MB）")
+
+        orphans = sorted(p.name for p in RAW_DIR.glob("up_*.mp4")
+                         if not (EVENT_DIR / f"{p.stem}.json").exists()
+                         and p.name != f"{up_id}.mp4")
+        if orphans:
+            st.divider()
+            st.markdown("#### 未识别的孤立上传")
+            st.caption("以下文件只有原始视频、没有识别结果，可单独删除：")
+            for name in orphans:
+                c1, c2 = st.columns([4, 1])
+                c1.caption(name)
+                if c2.button("删除", key=f"del_orphan_{name}"):
+                    (RAW_DIR / name).unlink(missing_ok=True)
+                    st.rerun()
 
         if st.button("开始识别", type="primary"):
             with st.status("正在运行识别管线 ...", expanded=True) as status:
